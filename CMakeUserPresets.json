@@ -1,0 +1,16 @@
+{
+    "version": 5,
+    "configurePresets": [
+    {
+        "name": "default",
+        "displayName": "Default Config",
+        "description": "Default build using Ninja Multi-Config generator",
+        "generator": "Ninja Multi-Config",
+        "cacheVariables": {
+            "CMAKE_EXPORT_COMPILE_COMMANDS": {
+                "type": "BOOL",
+                "value": "ON"
+            }
+        }
+    } ]
+}
