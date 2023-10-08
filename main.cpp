@@ -1,8 +1,9 @@
+// Vulkan headers need to be included before GLFW, see
+// https://www.glfw.org/docs/latest/vulkan_guide.html
 #include "vulkan/vulkan.hpp"
-#include <vulkan/vulkan_core.h>
-#include <vulkan/vulkan.h>
+#include "vulkan/vulkan_core.h"
+#include "vulkan/vulkan.h"
 
-#define GLFW_INCLUDE_VULKAN
 #include "GLFW/glfw3.h"
 
 #include <cstdint>
@@ -21,7 +22,10 @@ uint32_t get_instance_version()
     return VK_API_VERSION_1_0;
   else {
     uint32_t instanceVersion;
-    auto result = FN_vkEnumerateInstanceVersion(&instanceVersion);
+    const auto result = FN_vkEnumerateInstanceVersion(&instanceVersion);
+    if (result != VK_SUCCESS) {
+      throw std::runtime_error("Vulkan instance enumeration failed");
+    }
     return instanceVersion & 0xFFFF0000; //Remove the patch version.
   }
 }
@@ -43,7 +47,6 @@ public:
 
   ~GlfwContext()
   {
-    std::cout << "terminate called\n";
     glfwTerminate();
   }
 
@@ -119,9 +122,6 @@ int main()
 {
   std::cout << "version: " << get_instance_version() << '\n';
 
-  //PFN_vkCreateDevice pfnCreateDevice = (PFN_vkCreateDevice)
-  //  glfwGetInstanceProcAddress(static_cast<VkInstance>(instance), "vkCreateDevice");
-
   try {
     GlfwContext context;
 
@@ -131,12 +131,12 @@ int main()
       std::cout << "Vulkan support is present\n";
     }
 
-    uint32_t count;
-    const char** extensions = glfwGetRequiredInstanceExtensions(&count);
+    uint32_t required_extensions_count;
+    const char** required_extensions = glfwGetRequiredInstanceExtensions(&required_extensions_count);
 
-    if (extensions) {
-      for (uint32_t i = 0; i < count; ++i) {
-        std::cout << extensions[i] << '\n';
+    if (required_extensions) {
+      for (uint32_t i = 0; i < required_extensions_count; ++i) {
+        std::cout << required_extensions[i] << '\n';
       }
     }
 
@@ -149,22 +149,22 @@ int main()
     vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, available_extensions.data());
 
     for (const auto &extension : available_extensions) {
-      std::cout << "\t" << extension.extensionName << std::endl;
+      std::cout << '\t' << extension.extensionName << '\n';
     }
 
-    VkApplicationInfo appInfo = {};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Sample App";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_3;
+    VkApplicationInfo app_info = {};
+    app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    app_info.pApplicationName = "Sample App";
+    app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    app_info.pEngineName = "No Engine";
+    app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    app_info.apiVersion = VK_API_VERSION_1_3;
 
     VkInstanceCreateInfo create_info = {};
     create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    create_info.pApplicationInfo = &appInfo;
-    create_info.enabledExtensionCount = extension_count;
-    create_info.ppEnabledExtensionNames = extensions;
+    create_info.pApplicationInfo = &app_info;
+    create_info.enabledExtensionCount = required_extensions_count;
+    create_info.ppEnabledExtensionNames = required_extensions;
     create_info.enabledLayerCount = 0;
     create_info.pNext = nullptr;
 
