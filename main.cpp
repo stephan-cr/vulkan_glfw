@@ -1,16 +1,21 @@
 // Vulkan headers need to be included before GLFW, see
 // https://www.glfw.org/docs/latest/vulkan_guide.html
+#define VK_USE_PLATFORM_WAYLAND_KHR
 #include "vulkan/vulkan.hpp"
 #include "vulkan/vulkan_core.h"
 #include "vulkan/vulkan.h"
 
 #include "GLFW/glfw3.h"
+#define GLFW_EXPOSE_NATIVE_WAYLAND
+#include "GLFW/glfw3native.h"
 
 #include <cstdint>
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -40,6 +45,8 @@ public:
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+
   }
 
   GlfwContext(const GlfwContext&) = delete;
@@ -71,9 +78,8 @@ public:
     }
   }
 
-  void create_window_surface(VkInstance instance)
+  void create_window_surface(VkInstance instance, VkSurfaceKHR surface)
   {
-    VkSurfaceKHR surface;
     if (glfwCreateWindowSurface(instance, window.get(), nullptr, &surface) != VK_SUCCESS) {
       throw std::runtime_error("create window surface failed");
     }
@@ -90,6 +96,11 @@ public:
 
   bool should_close() {
     return glfwWindowShouldClose(window.get());
+  }
+
+  void show() {
+    glfwSetWindowPos(window.get(), 256, 256);
+    glfwShowWindow(window.get());
   }
 
   void swap_buffers() {
@@ -173,6 +184,78 @@ int main()
       throw std::runtime_error("Vulkan instance creation failed");
     }
 
+    // https://vulkan-tutorial.com/en/Drawing_a_triangle/Setup/Physical_devices_and_queue_families
+    uint32_t device_count = 0;
+    vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
+    std::cout << "device count: " << device_count << '\n';
+
+    std::vector<VkPhysicalDevice> devices(device_count);
+    vkEnumeratePhysicalDevices(instance, &device_count, devices.data());
+
+    uint32_t queue_family_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(devices[0], &queue_family_count, nullptr);
+
+    std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
+    vkGetPhysicalDeviceQueueFamilyProperties(devices[0], &queue_family_count, queue_families.data());
+
+    std::cout << "queue family count: " << queue_family_count << '\n';
+
+    std::optional<uint32_t> queue_family_index;
+    uint32_t index = 0;
+    for (const auto& queue_family : queue_families) {
+      if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        queue_family_index = index;
+        break;
+      }
+
+      ++index;
+    }
+
+    // https://vulkan-tutorial.com/en/Drawing_a_triangle/Setup/Logical_device_and_queues
+    VkDeviceQueueCreateInfo queue_create_info{};
+    queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue_create_info.queueFamilyIndex = queue_family_index.value();
+    queue_create_info.queueCount = 1;
+    const float queue_priority = 1.0f;
+    queue_create_info.pQueuePriorities = &queue_priority;
+
+    VkPhysicalDeviceFeatures device_features{};
+
+    std::unique_ptr<std::remove_pointer_t<VkDevice>, void (*)(VkDevice)> device{nullptr, [](VkDevice device) { vkDestroyDevice(device, nullptr); }};
+    {
+      VkDeviceCreateInfo create_info{};
+      create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+      create_info.pQueueCreateInfos = &queue_create_info;
+      create_info.queueCreateInfoCount = 1;
+      create_info.pEnabledFeatures = &device_features;
+      create_info.enabledExtensionCount = 0;
+      create_info.enabledLayerCount = 0;
+
+      VkDevice temp_device;
+      if (vkCreateDevice(devices[0], &create_info, nullptr, &temp_device) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create logical device!");
+      }
+
+      device.reset(temp_device);
+    }
+
+    VkQueue graphics_queue;
+
+    vkGetDeviceQueue(device.get(), queue_family_index.value(), 0, &graphics_queue);
+
+    // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Window_surface
+    VkSurfaceKHR surface;
+    {
+      VkWaylandSurfaceCreateInfoKHR create_info{};
+      create_info.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
+      create_info.display = glfwGetWaylandDisplay();
+      create_info.surface = nullptr;
+
+      if (vkCreateWaylandSurfaceKHR(instance, &create_info, nullptr, &surface) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create window surface!");
+      }
+    }
+
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
@@ -180,8 +263,9 @@ int main()
 
     window.set_key_callback(key_callback);
     window.make_context_current();
-    window.create_window_surface(instance);
+    window.create_window_surface(instance, surface);
 
+    window.show();
     while (!window.should_close()) {
       window.swap_buffers();
       context.pool_events();
