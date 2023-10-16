@@ -1,5 +1,6 @@
 // Vulkan headers need to be included before GLFW, see
 // https://www.glfw.org/docs/latest/vulkan_guide.html
+#include <ios>
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #include "vulkan/vulkan.hpp"
 #include "vulkan/vulkan_core.h"
@@ -14,7 +15,9 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <set>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -119,6 +122,10 @@ public:
     return *this;
   }
 
+  GLFWwindow* raw_glfw_window() const {
+    return window.get();
+  }
+
 private:
   std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)> window;
 };
@@ -189,14 +196,14 @@ int main()
     vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
     std::cout << "device count: " << device_count << '\n';
 
-    std::vector<VkPhysicalDevice> devices(device_count);
-    vkEnumeratePhysicalDevices(instance, &device_count, devices.data());
+    std::vector<VkPhysicalDevice> physical_devices(device_count);
+    vkEnumeratePhysicalDevices(instance, &device_count, physical_devices.data());
 
     uint32_t queue_family_count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(devices[0], &queue_family_count, nullptr);
+    vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[0], &queue_family_count, nullptr);
 
     std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
-    vkGetPhysicalDeviceQueueFamilyProperties(devices[0], &queue_family_count, queue_families.data());
+    vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[0], &queue_family_count, queue_families.data());
 
     std::cout << "queue family count: " << queue_family_count << '\n';
 
@@ -223,16 +230,21 @@ int main()
 
     std::unique_ptr<std::remove_pointer_t<VkDevice>, void (*)(VkDevice)> device{nullptr, [](VkDevice device) { vkDestroyDevice(device, nullptr); }};
     {
+      const std::vector<const char*> device_extensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+      };
+
       VkDeviceCreateInfo create_info{};
       create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
       create_info.pQueueCreateInfos = &queue_create_info;
       create_info.queueCreateInfoCount = 1;
       create_info.pEnabledFeatures = &device_features;
-      create_info.enabledExtensionCount = 0;
+      create_info.enabledExtensionCount = device_extensions.size();
+      create_info.ppEnabledExtensionNames = device_extensions.data();
       create_info.enabledLayerCount = 0;
 
       VkDevice temp_device;
-      if (vkCreateDevice(devices[0], &create_info, nullptr, &temp_device) != VK_SUCCESS) {
+      if (vkCreateDevice(physical_devices[0], &create_info, nullptr, &temp_device) != VK_SUCCESS) {
         throw std::runtime_error("failed to create logical device!");
       }
 
@@ -243,33 +255,87 @@ int main()
 
     vkGetDeviceQueue(device.get(), queue_family_index.value(), 0, &graphics_queue);
 
+    Window window{640, 480, "My Title"};
+
     // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Window_surface
     VkSurfaceKHR surface;
     {
       VkWaylandSurfaceCreateInfoKHR create_info{};
       create_info.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
       create_info.display = glfwGetWaylandDisplay();
-      create_info.surface = nullptr;
+      create_info.surface = glfwGetWaylandWindow(window.raw_glfw_window()); // TODO how to abstract that well
 
       if (vkCreateWaylandSurfaceKHR(instance, &create_info, nullptr, &surface) != VK_SUCCESS) {
         throw std::runtime_error("failed to create window surface!");
       }
     }
 
+    VkBool32 present_support = false;
+    vkGetPhysicalDeviceSurfaceSupportKHR(physical_devices[0], queue_family_index.value(), surface, &present_support);
+    std::cout << std::boolalpha << "present_support: " << present_support << '\n';
+
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-
-    Window window{640, 480, "My Title"};
 
     window.set_key_callback(key_callback);
     window.make_context_current();
     window.create_window_surface(instance, surface);
+
+    // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Swap_chain
+    {
+      uint32_t extension_count;
+      vkEnumerateDeviceExtensionProperties(physical_devices[0], nullptr, &extension_count, nullptr);
+
+      std::vector<VkExtensionProperties> available_extensions(extension_count);
+      vkEnumerateDeviceExtensionProperties(physical_devices[0], nullptr, &extension_count, available_extensions.data());
+
+      std::set<std::string> available_extension_set;
+      for (const auto& extension: available_extensions) {
+
+        available_extension_set.insert(extension.extensionName);
+      }
+
+      for (const auto& extension: available_extension_set) {
+        std::cout << extension << '\n';
+      }
+
+      struct SwapChainSupportDetails {
+        VkSurfaceCapabilitiesKHR capabilities;
+        std::vector<VkSurfaceFormatKHR> formats;
+        std::vector<VkPresentModeKHR> presentModes;
+      };
+
+      SwapChainSupportDetails details;
+
+      // TODO crashes the program, find out why
+      vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_devices[0], surface, &details.capabilities);
+
+      uint32_t formatCount;
+      vkGetPhysicalDeviceSurfaceFormatsKHR(physical_devices[0], surface, &formatCount, nullptr);
+
+      if (formatCount != 0) {
+        details.formats.resize(formatCount);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(physical_devices[0], surface, &formatCount, details.formats.data());
+      }
+
+      uint32_t presentModeCount;
+      vkGetPhysicalDeviceSurfacePresentModesKHR(physical_devices[0], surface, &presentModeCount, nullptr);
+
+      if (presentModeCount != 0) {
+        details.presentModes.resize(presentModeCount);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physical_devices[0], surface, &presentModeCount, details.presentModes.data());
+      }
+
+      std::cout << "formatCount: " << formatCount << " presentModeCount: " << presentModeCount << '\n';
+    }
 
     window.show();
     while (!window.should_close()) {
       window.swap_buffers();
       context.pool_events();
     }
+
+    vkDeviceWaitIdle(device.get());
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';
     return 1;
