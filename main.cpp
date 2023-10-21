@@ -1,8 +1,10 @@
 // Vulkan headers need to be included before GLFW, see
 // https://www.glfw.org/docs/latest/vulkan_guide.html
-#include <ios>
+
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #include "vulkan/vulkan.hpp"
+#include <vulkan/vulkan_enums.hpp>
+#include "vulkan/vulkan_to_string.hpp"
 #include "vulkan/vulkan_core.h"
 #include "vulkan/vulkan.h"
 
@@ -10,14 +12,17 @@
 #define GLFW_EXPOSE_NATIVE_WAYLAND
 #include "GLFW/glfw3native.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <ios>
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -124,6 +129,14 @@ public:
 
   GLFWwindow* raw_glfw_window() const {
     return window.get();
+  }
+
+  std::pair<int, int> framebuffer_size() const {
+    int width;
+    int height;
+    glfwGetFramebufferSize(window.get(), &width, &height);
+
+    return {width, height};
   }
 
 private:
@@ -302,31 +315,66 @@ int main()
       struct SwapChainSupportDetails {
         VkSurfaceCapabilitiesKHR capabilities;
         std::vector<VkSurfaceFormatKHR> formats;
-        std::vector<VkPresentModeKHR> presentModes;
+        std::vector<VkPresentModeKHR> present_modes;
       };
 
       SwapChainSupportDetails details;
 
-      // TODO crashes the program, find out why
       vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_devices[0], surface, &details.capabilities);
+      int window_width, window_height;
+      std::tie(window_width, window_height) = window.framebuffer_size();
+      std::cout << "currentExtent.height: " << details.capabilities.currentExtent.height <<
+        " currentExtent.width: " << details.capabilities.currentExtent.width <<
+        " window_height: " << window_height << " window width: " << window_width <<
+        '\n';
 
-      uint32_t formatCount;
-      vkGetPhysicalDeviceSurfaceFormatsKHR(physical_devices[0], surface, &formatCount, nullptr);
+      VkExtent2D actualExtent = {
+        static_cast<uint32_t>(window_width),
+        static_cast<uint32_t>(window_height)
+      };
 
-      if (formatCount != 0) {
-        details.formats.resize(formatCount);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(physical_devices[0], surface, &formatCount, details.formats.data());
+      actualExtent.width = std::clamp(actualExtent.width,
+                                      details.capabilities.minImageExtent.width,
+                                      details.capabilities.maxImageExtent.width);
+      actualExtent.height = std::clamp(actualExtent.height,
+                                       details.capabilities.minImageExtent.height,
+                                       details.capabilities.maxImageExtent.height);
+
+      uint32_t format_count;
+      vkGetPhysicalDeviceSurfaceFormatsKHR(physical_devices[0], surface, &format_count, nullptr);
+
+      if (format_count != 0) {
+        details.formats.resize(format_count);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(physical_devices[0],
+                                             surface,
+                                             &format_count,
+                                             details.formats.data());
       }
 
-      uint32_t presentModeCount;
-      vkGetPhysicalDeviceSurfacePresentModesKHR(physical_devices[0], surface, &presentModeCount, nullptr);
+      uint32_t present_mode_count;
+      vkGetPhysicalDeviceSurfacePresentModesKHR(physical_devices[0], surface, &present_mode_count, nullptr);
 
-      if (presentModeCount != 0) {
-        details.presentModes.resize(presentModeCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(physical_devices[0], surface, &presentModeCount, details.presentModes.data());
+      if (present_mode_count != 0) {
+        details.present_modes.resize(present_mode_count);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physical_devices[0],
+                                                  surface,
+                                                  &present_mode_count,
+                                                  details.present_modes.data());
       }
 
-      std::cout << "formatCount: " << formatCount << " presentModeCount: " << presentModeCount << '\n';
+      std::cout << "format_count: " << format_count << " present_mode_count: " << present_mode_count << '\n';
+
+      for (const auto& format : details.formats) {
+        vk::SurfaceFormatKHR o(format);
+
+        std::cout << vk::to_string(o.format) << " : " << vk::to_string(o.colorSpace) << '\n';
+      }
+
+      for (const auto& present_mode : details.present_modes) {
+        vk::PresentModeKHR o = static_cast<vk::PresentModeKHR>(present_mode);
+
+        std::cout << "present mode: " << vk::to_string(o) << '\n';
+      }
     }
 
     window.show();
