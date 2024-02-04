@@ -4,7 +4,6 @@
 #include <ios>
 #include <iostream>
 #include <ostream>
-#include <utility>
 
 static bool quit = false;
 static bool attention = false;
@@ -70,6 +69,8 @@ int main()
     "gamepad name: " << glfwGetGamepadName(GLFW_JOYSTICK_1) << '\n';
 
   GLFWgamepadstate state;
+  float axis_left_trigger_last_pos = -1.f;
+  float axis_right_trigger_last_pos = -1.f;
   Pos axis_left_last_pos = { 0, 0 };
   Pos axis_right_last_pos = { 0, 0 };
   while (!glfwWindowShouldClose(window)) {
@@ -109,15 +110,22 @@ int main()
         std::cout << "gamepad dpad left\n";
       }
 
-#if 0
-      std::cout << "left/right trigger: " << state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] << ", "
-                << state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] << '\n';
-#endif
+      constexpr float SENSITIVITY = .1f;
+
+      float axis_left_trigger_current_pos = state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER];
+      float axis_right_trigger_current_pos = state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER];
+
+      if (std::fabs(axis_left_trigger_current_pos - axis_left_trigger_last_pos) >= SENSITIVITY ||
+          std::fabs(axis_right_trigger_current_pos - axis_right_trigger_last_pos) >= SENSITIVITY) {
+        std::cout << "left/right trigger: " << state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] << ", "
+                  << state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] << '\n';
+        axis_left_trigger_last_pos = axis_left_trigger_current_pos;
+        axis_right_trigger_last_pos = axis_right_trigger_current_pos;
+      }
+
 
       Pos axis_left_current_pos = { state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] };
       Pos axis_right_current_pos = { state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] };
-
-      constexpr float SENSITIVITY = .1f;
 
       if (std::fabs(axis_left_current_pos.x - axis_left_last_pos.x) >= SENSITIVITY ||
           std::fabs(axis_left_current_pos.y - axis_left_last_pos.y) >= SENSITIVITY) {
