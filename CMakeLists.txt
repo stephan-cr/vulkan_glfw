@@ -26,11 +26,19 @@ add_executable(sample
   main.cpp)
 target_compile_options(sample PRIVATE $<$<CXX_COMPILER_ID:Clang,GNU>:-Wall -Wextra -Wno-unused-parameter>)
 add_shader(vert_spirv vertex ${CMAKE_SOURCE_DIR}/vert.glsl vert.spv)
-# add_dependencies(sample vert_spirv)
+add_dependencies(sample vert_spirv)
 target_compile_features(sample PRIVATE cxx_std_17)
 target_link_libraries(sample
   PRIVATE
   glfw
   Vulkan::Vulkan
-  vert_spirv
+)
+
+add_executable(joy
+  joy.cpp)
+target_compile_options(joy PRIVATE $<$<CXX_COMPILER_ID:Clang,GNU>:-Wall -Wextra -Wno-unused-parameter>)
+target_compile_features(joy PRIVATE cxx_std_17)
+target_link_libraries(joy
+  PRIVATE
+  glfw
 )
