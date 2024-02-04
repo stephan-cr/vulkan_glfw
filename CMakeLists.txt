@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.24)
 
 project(vulkan_sample LANGUAGES CXX)
 
-find_package(glfw3 REQUIRED)
+# in GLFW < 3.3, the gamepad wouldn't work
+find_package(glfw3 3.3 REQUIRED)
 find_package(Vulkan REQUIRED COMPONENTS glslc)
 
 macro(add_shader target type input output)
