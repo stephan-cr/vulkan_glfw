@@ -6,6 +6,9 @@
 #include <ostream>
 #include <utility>
 
+static bool quit = false;
+static bool attention = false;
+
 void joystick_callback(int jid, int event)
 {
   std::cout << "joystick event\n";
@@ -21,6 +24,14 @@ void joystick_callback(int jid, int event)
   }
 
   std::cout << std::endl;
+}
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+  if (key == GLFW_KEY_Q && action == GLFW_PRESS)
+    quit = true;
+  else if (key == GLFW_KEY_A && action == GLFW_PRESS)
+    attention = true;
 }
 
 struct Pos
@@ -47,11 +58,12 @@ int main()
   }
 
   glfwSetJoystickCallback(joystick_callback);
+  glfwSetKeyCallback(window, key_callback);
   glfwMakeContextCurrent(window);
 
   std::cout << std::boolalpha;
-  for (int i = 0; i < GLFW_JOYSTICK_LAST; i++) {
-    std::cout << "joy: " << (glfwJoystickPresent(i) == GLFW_TRUE) << '\n';
+  for (int joystick_id = 0; joystick_id < GLFW_JOYSTICK_LAST; joystick_id++) {
+    std::cout << "joy: " << (glfwJoystickPresent(joystick_id) == GLFW_TRUE) << '\n';
   }
 
   std::cout << "is gamepad: " << glfwJoystickIsGamepad(GLFW_JOYSTICK_1) << '\n' <<
@@ -105,18 +117,30 @@ int main()
       Pos axis_left_current_pos = { state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] };
       Pos axis_right_current_pos = { state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] };
 
-      if (std::fabs(axis_left_current_pos.x - axis_left_last_pos.x) >= 0.1 ||
-          std::fabs(axis_left_current_pos.y - axis_left_last_pos.y) >= 0.1) {
+      constexpr float SENSITIVITY = .1f;
+
+      if (std::fabs(axis_left_current_pos.x - axis_left_last_pos.x) >= SENSITIVITY ||
+          std::fabs(axis_left_current_pos.y - axis_left_last_pos.y) >= SENSITIVITY) {
         std::cout << "gamepad left: " << axis_left_current_pos << '\n';
       }
+      axis_left_last_pos = axis_left_current_pos;
 
-      if (std::fabs(axis_right_current_pos.x - axis_right_last_pos.x) >= 0.1 ||
-          std::fabs(axis_right_current_pos.y - axis_right_last_pos.y) >= 0.1) {
+      if (std::fabs(axis_right_current_pos.x - axis_right_last_pos.x) >= SENSITIVITY ||
+          std::fabs(axis_right_current_pos.y - axis_right_last_pos.y) >= SENSITIVITY) {
         std::cout << "gamepad right: " << axis_right_current_pos << '\n';
       }
+      axis_right_last_pos = axis_right_current_pos;
     }
     glfwSwapBuffers(window);
     glfwPollEvents();
+
+    if (quit)
+      glfwSetWindowShouldClose(window, GLFW_TRUE);
+
+    if (attention) {
+      glfwRequestWindowAttention(window);
+      attention = false;
+    }
   }
 
   glfwDestroyWindow(window);
