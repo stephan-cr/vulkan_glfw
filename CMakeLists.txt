@@ -15,7 +15,7 @@ macro(add_shader target type input output)
     OUTPUT
     ${output}
     COMMAND
-    Vulkan::glslc -fshader-stage=${type} -o vert.spv ${input}
+    Vulkan::glslc -fshader-stage=${type} -o ${output} ${input}
     DEPENDS
     ${input}
     COMMENT "compiling ${input}")
@@ -25,9 +25,11 @@ endmacro()
 
 add_executable(sample
   main.cpp)
-target_compile_options(sample PRIVATE $<$<CXX_COMPILER_ID:Clang,GNU>:-Wall -Wextra -Wno-unused-parameter>)
+target_compile_options(sample PRIVATE $<$<CXX_COMPILER_ID:Clang,GNU>:-Wall;-Wextra;-Wconversion;-Wno-unused-parameter>)
 add_shader(vert_spirv vertex ${CMAKE_SOURCE_DIR}/vert.glsl vert.spv)
+add_shader(frag_spirv frag ${CMAKE_SOURCE_DIR}/frag.glsl frag.spv)
 add_dependencies(sample vert_spirv)
+add_dependencies(sample frag_spirv)
 target_compile_features(sample PRIVATE cxx_std_17)
 target_link_libraries(sample
   PRIVATE
