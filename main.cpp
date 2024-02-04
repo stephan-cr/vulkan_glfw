@@ -13,6 +13,7 @@
 #include "GLFW/glfw3native.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstdint>
 #include <functional>
 #include <ios>
@@ -48,13 +49,12 @@ class GlfwContext
 public:
   GlfwContext()
   {
-    if (!glfwInit()) {
+    if (glfwInit() == GLFW_FALSE) {
       throw std::runtime_error("GLFW initialization failed");
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
   }
 
   GlfwContext(const GlfwContext&) = delete;
@@ -65,7 +65,13 @@ public:
     glfwTerminate();
   }
 
-  bool vulkan_supported() const {
+  void clear()
+  {
+    // glClear(GL_COLOR_BUFFER_BIT);
+  }
+
+  bool vulkan_supported() const
+  {
     return glfwVulkanSupported() == GLFW_TRUE;
   }
 
@@ -80,7 +86,8 @@ class Window
 public:
   Window(int width, int height, const char* name) :
     window{glfwCreateWindow(width, height, name, nullptr, nullptr),
-           &glfwDestroyWindow} {
+           &glfwDestroyWindow}
+  {
     if (!window) {
       throw std::runtime_error("GLFW window creation failed");
     }
@@ -98,40 +105,48 @@ public:
     glfwSetKeyCallback(window.get(), callback);
   }
 
-  void make_context_current() {
+  void make_context_current()
+  {
     glfwMakeContextCurrent(window.get());
   }
 
-  bool should_close() {
-    return glfwWindowShouldClose(window.get());
+  bool should_close()
+  {
+    return glfwWindowShouldClose(window.get()) == GLFW_TRUE;
   }
 
-  void show() {
-    glfwSetWindowPos(window.get(), 256, 256);
-    glfwShowWindow(window.get());
+  void show()
+  {
+    // glfwSetWindowPos(window.get(), 256, 256);
+    // glfwShowWindow(window.get());
   }
 
-  void swap_buffers() {
+  void swap_buffers()
+  {
     glfwSwapBuffers(window.get());
   }
 
   Window(const Window&) = delete;
   Window& operator=(const Window&) = delete;
 
-  Window(Window&& other) : window{std::exchange(other.window, nullptr)} {
+  Window(Window&& other) noexcept : window{std::exchange(other.window, nullptr)}
+  {
   }
 
-  Window& operator=(Window&& other) {
+  Window& operator=(Window&& other) noexcept
+  {
     window = std::move(other.window);
 
     return *this;
   }
 
-  GLFWwindow* raw_glfw_window() const {
+  GLFWwindow* raw_glfw_window() const
+  {
     return window.get();
   }
 
-  std::pair<int, int> framebuffer_size() const {
+  std::pair<int, int> framebuffer_size() const
+  {
     int width;
     int height;
     glfwGetFramebufferSize(window.get(), &width, &height);
@@ -149,12 +164,29 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
     glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
 
+void joystick_callback(int jid, int event)
+{
+  std::cout << "joystick event\n";
+  if (event == GLFW_CONNECTED) {
+    // The joystick was connected
+
+    std::cout << "joystick connected\n";
+  } else if (event == GLFW_DISCONNECTED) {
+    // The joystick was disconnected
+
+    std::cout << "joystick disconnected\n";
+  }
+
+  std::cout.flush();
+}
+
 int main()
 {
   std::cout << "version: " << get_instance_version() << '\n';
 
   try {
     GlfwContext context;
+    glfwSetJoystickCallback(joystick_callback);
 
     if (!context.vulkan_supported()) {
       throw std::runtime_error("Vulkan is not supported");
@@ -165,7 +197,7 @@ int main()
     uint32_t required_extensions_count;
     const char** required_extensions = glfwGetRequiredInstanceExtensions(&required_extensions_count);
 
-    if (required_extensions) {
+    if (required_extensions != nullptr) {
       for (uint32_t i = 0; i < required_extensions_count; ++i) {
         std::cout << required_extensions[i] << '\n';
       }
@@ -283,7 +315,7 @@ int main()
       }
     }
 
-    VkBool32 present_support = false;
+    VkBool32 present_support = VK_FALSE;
     vkGetPhysicalDeviceSurfaceSupportKHR(physical_devices[0], queue_family_index.value(), surface, &present_support);
     std::cout << std::boolalpha << "present_support: " << present_support << '\n';
 
@@ -328,15 +360,15 @@ int main()
         " window_height: " << window_height << " window width: " << window_width <<
         '\n';
 
-      VkExtent2D actualExtent = {
+      VkExtent2D actual_extent = {
         static_cast<uint32_t>(window_width),
         static_cast<uint32_t>(window_height)
       };
 
-      actualExtent.width = std::clamp(actualExtent.width,
+      actual_extent.width = std::clamp(actual_extent.width,
                                       details.capabilities.minImageExtent.width,
                                       details.capabilities.maxImageExtent.width);
-      actualExtent.height = std::clamp(actualExtent.height,
+      actual_extent.height = std::clamp(actual_extent.height,
                                        details.capabilities.minImageExtent.height,
                                        details.capabilities.maxImageExtent.height);
 
@@ -365,20 +397,52 @@ int main()
       std::cout << "format_count: " << format_count << " present_mode_count: " << present_mode_count << '\n';
 
       for (const auto& format : details.formats) {
-        vk::SurfaceFormatKHR o(format);
+        const vk::SurfaceFormatKHR o(format);
 
         std::cout << vk::to_string(o.format) << " : " << vk::to_string(o.colorSpace) << '\n';
       }
 
       for (const auto& present_mode : details.present_modes) {
-        vk::PresentModeKHR o = static_cast<vk::PresentModeKHR>(present_mode);
+        const vk::PresentModeKHR o = static_cast<vk::PresentModeKHR>(present_mode);
 
         std::cout << "present mode: " << vk::to_string(o) << '\n';
+      }
+
+      const uint32_t image_count = details.capabilities.minImageCount + 1;
+      assert(image_count <= details.capabilities.maxImageCount);
+
+      VkSwapchainCreateInfoKHR create_info{};
+      create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+      create_info.surface = surface;
+      create_info.minImageCount = image_count;
+      create_info.imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
+      create_info.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+      create_info.imageExtent = actual_extent;
+      create_info.imageArrayLayers = 1;
+      create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+      // TODO fill in the rest of the create_info configuration items
+
+      std::unique_ptr<std::remove_pointer_t<VkSwapchainKHR>, std::function<void(VkSwapchainKHR)>>
+        swap_chain{
+        nullptr,
+        [&device](VkSwapchainKHR chain){
+          vkDestroySwapchainKHR(device.get(), chain, nullptr);
+        }};
+
+      {
+        VkSwapchainKHR temp_swap_chain;
+        if (vkCreateSwapchainKHR(device.get(), &create_info, nullptr, &temp_swap_chain) != VK_SUCCESS) {
+          throw std::runtime_error("failed to create swap chain!");
+        }
+
+        swap_chain.reset(temp_swap_chain);
       }
     }
 
     window.show();
     while (!window.should_close()) {
+      context.clear();
       window.swap_buffers();
       context.pool_events();
     }
