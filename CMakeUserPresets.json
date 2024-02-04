@@ -1,16 +1,31 @@
 {
     "version": 5,
     "configurePresets": [
-    {
-        "name": "default",
-        "displayName": "Default Config",
-        "description": "Default build using Ninja Multi-Config generator",
-        "generator": "Ninja Multi-Config",
-        "cacheVariables": {
-            "CMAKE_EXPORT_COMPILE_COMMANDS": {
-                "type": "BOOL",
-                "value": "ON"
+        {
+            "name": "default",
+            "displayName": "Default Config",
+            "description": "Default build using Ninja Multi-Config generator",
+            "generator": "Ninja Multi-Config",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": {
+                    "type": "BOOL",
+                    "value": "ON"
+                }
+            }
+        },
+        {
+            "name": "clang",
+            "displayName": "Default Config",
+            "description": "Default build using Ninja Multi-Config generator",
+            "generator": "Ninja Multi-Config",
+            "binaryDir": "${sourceDir}/build_clang",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_CXX_COMPILER": "clang++"
             }
         }
-    } ]
+    ]
 }
