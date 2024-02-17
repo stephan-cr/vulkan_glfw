@@ -340,6 +340,12 @@ int main(int argc, char** argv)
     window.create_window_surface(instance, surface);
 
     // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Swap_chain
+    std::unique_ptr<std::remove_pointer_t<VkSwapchainKHR>, std::function<void(VkSwapchainKHR)>>
+      swap_chain{
+      nullptr,
+      [&device](VkSwapchainKHR chain){
+        vkDestroySwapchainKHR(device.get(), chain, nullptr);
+      }};
     {
       uint32_t extension_count;
       vkEnumerateDeviceExtensionProperties(physical_devices[0], nullptr, &extension_count, nullptr);
@@ -433,13 +439,6 @@ int main(int argc, char** argv)
       create_info.imageExtent = actual_extent;
       create_info.imageArrayLayers = 1;
       create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-      std::unique_ptr<std::remove_pointer_t<VkSwapchainKHR>, std::function<void(VkSwapchainKHR)>>
-        swap_chain{
-        nullptr,
-        [&device](VkSwapchainKHR chain){
-          vkDestroySwapchainKHR(device.get(), chain, nullptr);
-        }};
 
       {
         VkSwapchainKHR temp_swap_chain;
@@ -842,9 +841,42 @@ int main(int argc, char** argv)
       std::cout << "HERE\n";
     }
 
+    // https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation
+
+    VkSemaphore imageAvailableSemaphore;
+    VkSemaphore renderFinishedSemaphore;
+    VkFence inFlightFence;
+
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    if (vkCreateSemaphore(device.get(), &semaphoreInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
+        vkCreateSemaphore(device.get(), &semaphoreInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS ||
+        vkCreateFence(device.get(), &fenceInfo, nullptr, &inFlightFence) != VK_SUCCESS) {
+      throw std::runtime_error("failed to create semaphores!");
+    }
+
     window.show();
     while (!window.should_close()) {
       context.clear();
+      vkWaitForFences(device.get(), 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+
+      uint32_t imageIndex;
+      vkAcquireNextImageKHR(device.get(),
+                            swap_chain.get(),
+                            UINT64_MAX,
+                            imageAvailableSemaphore,
+                            VK_NULL_HANDLE,
+                            &imageIndex);
+
+      std::cout << "image index: " << imageIndex << '\n';
+      // vkResetCommandBuffer(commandBuffer, 0);
+
+      vkResetFences(device.get(), 1, &inFlightFence);
       window.swap_buffers();
       context.pool_events();
     }
