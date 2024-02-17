@@ -6,6 +6,13 @@ project(vulkan_sample LANGUAGES CXX)
 find_package(glfw3 3.3 REQUIRED)
 find_package(Vulkan REQUIRED COMPONENTS glslc)
 
+include(CheckPIESupported)
+check_pie_supported(LANGUAGES CXX)
+
+if (NOT CMAKE_CXX_LINK_PIE_SUPPORTED)
+  message(WARNING "PIE is not supported at link time")
+endif()
+
 macro(add_shader target type input output)
   if (NOT ((${type} STREQUAL "vertex") OR (${type} STREQUAL "frag")))
     message(FATAL_ERROR "unknown shader type \"${type}\"")
@@ -25,12 +32,23 @@ endmacro()
 
 add_executable(sample
   main.cpp)
-target_compile_options(sample PRIVATE $<$<CXX_COMPILER_ID:Clang,GNU>:-Wall;-Wextra;-Wconversion;-Wno-unused-parameter>)
+target_compile_options(sample PRIVATE
+  $<$<CXX_COMPILER_ID:Clang,GNU>:-Wall;-Wextra;-Wconversion;-Wno-unused-parameter>
+  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:GNU>>:-fsanitize=address>
+  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:Clang,GNU>>:-fsanitize=undefined>
+  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:Clang>>:-fsanitize=memory>
+)
+target_link_options(sample PRIVATE
+  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:GNU>>:-fsanitize=address>
+  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:Clang,GNU>>:-fsanitize=undefined>
+  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:Clang>>:-fsanitize=memory>
+)
 add_shader(vert_spirv vertex ${CMAKE_SOURCE_DIR}/vert.glsl vert.spv)
 add_shader(frag_spirv frag ${CMAKE_SOURCE_DIR}/frag.glsl frag.spv)
 add_dependencies(sample vert_spirv)
 add_dependencies(sample frag_spirv)
 target_compile_features(sample PRIVATE cxx_std_17)
+set_property(TARGET sample PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(sample
   PRIVATE
   glfw
