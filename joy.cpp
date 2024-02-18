@@ -8,15 +8,19 @@
 static bool quit = false;
 static bool attention = false;
 
-void joystick_callback(int jid, int event)
+static void error_callback(int code, const char* description)
+{
+  std::cerr << "error: " << code << ", " << description << '\n';
+}
+
+static void joystick_callback(int jid, int event)
 {
   std::cout << "joystick event\n";
   if (event == GLFW_CONNECTED) {
     // The joystick was connected
 
     std::cout << "joystick connected\n";
-  }
-  else if (event == GLFW_DISCONNECTED) {
+  } else if (event == GLFW_DISCONNECTED) {
     // The joystick was disconnected
 
     std::cout << "joystick disconnected\n";
@@ -25,7 +29,7 @@ void joystick_callback(int jid, int event)
   std::cout << std::endl;
 }
 
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
   if (key == GLFW_KEY_Q && action == GLFW_PRESS)
     quit = true;
@@ -47,13 +51,18 @@ std::ostream& operator<< (std::ostream& stream, const Pos& pos)
 
 int main()
 {
-  if (!glfwInit()) {
+  glfwSetErrorCallback(error_callback);
+  if (glfwInit() == GLFW_FALSE) {
     // Initialization failed
+
+    return 1;
   }
 
   GLFWwindow* window = glfwCreateWindow(640, 480, "My Title", nullptr, nullptr);
   if (!window) {
     // Window or context creation failed
+
+    return 1;
   }
 
   glfwSetJoystickCallback(joystick_callback);
@@ -73,7 +82,7 @@ int main()
   float axis_right_trigger_last_pos = -1.f;
   Pos axis_left_last_pos = { 0, 0 };
   Pos axis_right_last_pos = { 0, 0 };
-  while (!glfwWindowShouldClose(window)) {
+  while (glfwWindowShouldClose(window) == GLFW_FALSE) {
     // Keep running
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
@@ -112,8 +121,8 @@ int main()
 
       constexpr float SENSITIVITY = .1f;
 
-      float axis_left_trigger_current_pos = state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER];
-      float axis_right_trigger_current_pos = state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER];
+      const float axis_left_trigger_current_pos = state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER];
+      const float axis_right_trigger_current_pos = state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER];
 
       if (std::fabs(axis_left_trigger_current_pos - axis_left_trigger_last_pos) >= SENSITIVITY ||
           std::fabs(axis_right_trigger_current_pos - axis_right_trigger_last_pos) >= SENSITIVITY) {
@@ -124,8 +133,8 @@ int main()
       }
 
 
-      Pos axis_left_current_pos = { state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] };
-      Pos axis_right_current_pos = { state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] };
+      const Pos axis_left_current_pos = { state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] };
+      const Pos axis_right_current_pos = { state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] };
 
       if (std::fabs(axis_left_current_pos.x - axis_left_last_pos.x) >= SENSITIVITY ||
           std::fabs(axis_left_current_pos.y - axis_left_last_pos.y) >= SENSITIVITY) {

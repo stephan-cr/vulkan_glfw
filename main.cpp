@@ -169,13 +169,18 @@ private:
   std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)> window;
 };
 
+static void error_callback(int code, const char* description)
+{
+  std::cerr << "error: " << code << ", " << description << '\n';
+}
+
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
   if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
     glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
 
-void joystick_callback(int jid, int event)
+static void joystick_callback(int jid, int event)
 {
   std::cout << "joystick event\n";
   if (event == GLFW_CONNECTED) {
@@ -196,6 +201,7 @@ int main(int argc, char** argv)
   std::cout << "version: " << get_instance_version() << '\n';
 
   try {
+    glfwSetErrorCallback(error_callback);
     GlfwContext context;
     context.set_window_floating_hint(true);
     glfwSetJoystickCallback(joystick_callback);
