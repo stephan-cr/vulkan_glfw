@@ -12,6 +12,8 @@
 #define GLFW_EXPOSE_NATIVE_WAYLAND
 #include "GLFW/glfw3native.h"
 
+#include "allocator.hpp"
+
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -509,7 +511,7 @@ int main(int argc, char** argv)
           throw std::runtime_error("failed to open file!");
         }
         const size_t file_size = (size_t) file.tellg();
-        std::vector<char> code(file_size);
+        std::vector<char, AlignedAllocator<char, uint32_t>> code(file_size);
         file.seekg(0);
         file.read(code.data(), static_cast<std::streamsize>(file_size));
 
@@ -536,7 +538,7 @@ int main(int argc, char** argv)
           throw std::runtime_error("failed to open file!");
         }
         const size_t file_size = (size_t) file.tellg();
-        std::vector<char> code(file_size);
+        std::vector<char, AlignedAllocator<char, uint32_t>> code(file_size);
         file.seekg(0);
         file.read(code.data(), static_cast<std::streamsize>(file_size));
 
@@ -740,8 +742,8 @@ int main(int argc, char** argv)
       pipeline_info.basePipelineHandle = VK_NULL_HANDLE; // Optional
       pipeline_info.basePipelineIndex = -1; // Optional
 
-      VkPipeline graphicsPipeline;
-      if (vkCreateGraphicsPipelines(device.get(), VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+      VkPipeline graphics_pipeline;
+      if (vkCreateGraphicsPipelines(device.get(), VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &graphics_pipeline) != VK_SUCCESS) {
         throw std::runtime_error("failed to create graphics pipeline!");
       }
 
@@ -821,7 +823,7 @@ int main(int argc, char** argv)
 
       vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 
-      vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+      vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
       {
         VkViewport viewport{};
         viewport.x = 0.0f;
