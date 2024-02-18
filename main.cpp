@@ -318,7 +318,6 @@ int main(int argc, char** argv)
     }
 
     VkQueue graphics_queue;
-
     vkGetDeviceQueue(device.get(), queue_family_index.value(), 0, &graphics_queue);
 
     Window window{640, 480, "My Title"};
@@ -354,6 +353,13 @@ int main(int argc, char** argv)
       [&device](VkSwapchainKHR chain){
         vkDestroySwapchainKHR(device.get(), chain, nullptr);
       }};
+    struct SwapChainSupportDetails {
+      VkSurfaceCapabilitiesKHR capabilities;
+      std::vector<VkSurfaceFormatKHR> formats;
+      std::vector<VkPresentModeKHR> present_modes;
+    };
+    SwapChainSupportDetails details;
+    VkExtent2D actual_extent{};
     {
       uint32_t extension_count;
       vkEnumerateDeviceExtensionProperties(physical_devices[0], nullptr, &extension_count, nullptr);
@@ -363,21 +369,12 @@ int main(int argc, char** argv)
 
       std::set<std::string> available_extension_set;
       for (const auto& extension: available_extensions) {
-
         available_extension_set.insert(extension.extensionName);
       }
 
       for (const auto& extension: available_extension_set) {
         std::cout << extension << '\n';
       }
-
-      struct SwapChainSupportDetails {
-        VkSurfaceCapabilitiesKHR capabilities;
-        std::vector<VkSurfaceFormatKHR> formats;
-        std::vector<VkPresentModeKHR> present_modes;
-      };
-
-      SwapChainSupportDetails details;
 
       vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_devices[0], surface, &details.capabilities);
       int window_width, window_height;
@@ -387,15 +384,10 @@ int main(int argc, char** argv)
         " window_height: " << window_height << " window width: " << window_width <<
         '\n';
 
-      VkExtent2D actual_extent = {
-        static_cast<uint32_t>(window_width),
-        static_cast<uint32_t>(window_height)
-      };
-
-      actual_extent.width = std::clamp(actual_extent.width,
+      actual_extent.width = std::clamp(static_cast<uint32_t>(window_width),
                                        details.capabilities.minImageExtent.width,
                                        details.capabilities.maxImageExtent.width);
-      actual_extent.height = std::clamp(actual_extent.height,
+      actual_extent.height = std::clamp(static_cast<uint32_t>(window_height),
                                         details.capabilities.minImageExtent.height,
                                         details.capabilities.maxImageExtent.height);
 
@@ -456,7 +448,11 @@ int main(int argc, char** argv)
 
         swap_chain.reset(temp_swap_chain);
       }
+    }
 
+    std::vector<std::unique_ptr<std::remove_pointer_t<VkImageView>, std::function<void(VkImageView)>>>
+      swap_chain_image_views;
+    {
       // Retrieving the swap chain images
 
       std::vector<VkImage> swap_chain_images;
@@ -469,9 +465,6 @@ int main(int argc, char** argv)
       }
 
       // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Image_views
-
-      std::vector<std::unique_ptr<std::remove_pointer_t<VkImageView>, std::function<void(VkImageView)>>>
-        swap_chain_image_views;
 
       for (const auto& swap_chain_image : swap_chain_images) {
         VkImageViewCreateInfo create_info{};
@@ -498,13 +491,19 @@ int main(int argc, char** argv)
           vkDestroyImageView(device.get(), image_view, nullptr);
         });
       }
+    }
 
+    std::unique_ptr<std::remove_pointer_t<VkShaderModule>, std::function<void(VkShaderModule)>>
+      vert_shader_module{nullptr, [&device](VkShaderModule shader_module) {
+        vkDestroyShaderModule(device.get(), shader_module, nullptr);
+      }};
+    std::unique_ptr<std::remove_pointer_t<VkShaderModule>, std::function<void(VkShaderModule)>>
+      frag_shader_module{nullptr, [&device](VkShaderModule shader_module) {
+        vkDestroyShaderModule(device.get(), shader_module, nullptr);
+      }};
+    VkPipelineShaderStageCreateInfo shader_stages[2]{};
+    {
       // https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Shader_modules
-
-      std::unique_ptr<std::remove_pointer_t<VkShaderModule>, std::function<void(VkShaderModule)>>
-        vert_shader_module{nullptr, [&device](VkShaderModule shader_module) {
-          vkDestroyShaderModule(device.get(), shader_module, nullptr);
-        }};
       {
         std::ifstream file(argv[1], std::ios::ate | std::ios::binary);
         if (!file.is_open()) {
@@ -528,10 +527,6 @@ int main(int argc, char** argv)
         vert_shader_module.reset(shader_module);
       }
 
-      std::unique_ptr<std::remove_pointer_t<VkShaderModule>, std::function<void(VkShaderModule)>>
-        frag_shader_module{nullptr, [&device](VkShaderModule shader_module) {
-          vkDestroyShaderModule(device.get(), shader_module, nullptr);
-        }};
       {
         std::ifstream file(argv[2], std::ios::ate | std::ios::binary);
         if (!file.is_open()) {
@@ -545,6 +540,8 @@ int main(int argc, char** argv)
         VkShaderModuleCreateInfo create_info{};
         create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
         create_info.codeSize = code.size();
+        // TODO it is unclear whether vkCreateShaderModule copies the
+        // code or assumes that the vector lives long enough
         create_info.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
         VkShaderModule shader_module;
@@ -567,20 +564,32 @@ int main(int argc, char** argv)
       frag_shader_stage_info.module = frag_shader_module.get();
       frag_shader_stage_info.pName = "main";
 
-      VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info, frag_shader_stage_info};
+      shader_stages[0] = vert_shader_stage_info;
+      shader_stages[1] = frag_shader_stage_info;
+    }
 
+    std::unique_ptr<std::remove_pointer_t<VkRenderPass>,
+                    std::function<void(VkRenderPass)>> render_pass{
+      nullptr,
+      [&device](VkRenderPass render_pass) {
+        vkDestroyRenderPass(device.get(), render_pass, nullptr);
+      }
+    };
+    std::unique_ptr<std::remove_pointer_t<VkPipelineLayout>,
+                    std::function<void(VkPipelineLayout)>> pipeline_layout{
+      nullptr,
+      [&device](VkPipelineLayout pipeline_layout) {
+        vkDestroyPipelineLayout(device.get(), pipeline_layout, nullptr);
+      }
+    };
+    std::unique_ptr<std::remove_pointer_t<VkPipeline>, std::function<void(VkPipeline)>> graphics_pipeline{
+      nullptr,
+      [&device](VkPipeline graphics_pipeline) {
+        vkDestroyPipeline(device.get(), graphics_pipeline, nullptr);
+      }
+    };
+    {
       // https://vulkan-tutorial.com/Drawing_a_triangle/Graphics_pipeline_basics/Render_passes
-
-      std::unique_ptr<std::remove_pointer_t<VkRenderPass>,
-                      std::function<void(VkRenderPass)>>
-        render_pass{nullptr, [&device](VkRenderPass render_pass) {
-          vkDestroyRenderPass(device.get(), render_pass, nullptr);
-        }};
-      std::unique_ptr<std::remove_pointer_t<VkPipelineLayout>,
-                      std::function<void(VkPipelineLayout)>>
-        pipeline_layout{nullptr, [&device](VkPipelineLayout pipeline_layout) {
-          vkDestroyPipelineLayout(device.get(), pipeline_layout, nullptr);
-        }};
 
       {
         VkPipelineLayoutCreateInfo pipeline_layout_info{};
@@ -633,7 +642,7 @@ int main(int argc, char** argv)
         render_pass.reset(temp_render_pass);
       }
 
-      std::vector<VkDynamicState> dynamic_states = {
+      std::vector<VkDynamicState> dynamic_states{
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR
       };
@@ -724,33 +733,43 @@ int main(int argc, char** argv)
       color_blending.blendConstants[2] = 0.0f; // Optional
       color_blending.blendConstants[3] = 0.0f; // Optional
 
-      VkGraphicsPipelineCreateInfo pipeline_info{};
-      pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-      pipeline_info.stageCount = sizeof(shader_stages) / sizeof(VkPipelineShaderStageCreateInfo);
-      pipeline_info.pStages = shader_stages;
-      pipeline_info.pVertexInputState = &vertex_input_info;
-      pipeline_info.pInputAssemblyState = &input_assembly;
-      pipeline_info.pViewportState = &viewport_state;
-      pipeline_info.pRasterizationState = &rasterizer;
-      pipeline_info.pMultisampleState = &multisampling;
-      pipeline_info.pDepthStencilState = nullptr; // Optional
-      pipeline_info.pColorBlendState = &color_blending;
-      pipeline_info.pDynamicState = &dynamic_state;
-      pipeline_info.layout = pipeline_layout.get();
-      pipeline_info.renderPass = render_pass.get();
-      pipeline_info.subpass = 0;
-      pipeline_info.basePipelineHandle = VK_NULL_HANDLE; // Optional
-      pipeline_info.basePipelineIndex = -1; // Optional
+      {
+        VkGraphicsPipelineCreateInfo pipeline_info{};
+        pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipeline_info.stageCount = sizeof(shader_stages) / sizeof(VkPipelineShaderStageCreateInfo);
+        pipeline_info.pStages = shader_stages;
+        pipeline_info.pVertexInputState = &vertex_input_info;
+        pipeline_info.pInputAssemblyState = &input_assembly;
+        pipeline_info.pViewportState = &viewport_state;
+        pipeline_info.pRasterizationState = &rasterizer;
+        pipeline_info.pMultisampleState = &multisampling;
+        pipeline_info.pDepthStencilState = nullptr; // Optional
+        pipeline_info.pColorBlendState = &color_blending;
+        pipeline_info.pDynamicState = &dynamic_state;
+        pipeline_info.layout = pipeline_layout.get();
+        pipeline_info.renderPass = render_pass.get();
+        pipeline_info.subpass = 0;
+        pipeline_info.basePipelineHandle = VK_NULL_HANDLE; // Optional
+        pipeline_info.basePipelineIndex = -1; // Optional
 
-      VkPipeline graphics_pipeline;
-      if (vkCreateGraphicsPipelines(device.get(), VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &graphics_pipeline) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create graphics pipeline!");
+        VkPipeline temp_graphics_pipeline;
+        if (vkCreateGraphicsPipelines(device.get(),
+                                      VK_NULL_HANDLE,
+                                      1,
+                                      &pipeline_info,
+                                      nullptr,
+                                      &temp_graphics_pipeline) != VK_SUCCESS) {
+          throw std::runtime_error("failed to create graphics pipeline!");
+        }
+
+        graphics_pipeline.reset(temp_graphics_pipeline);
       }
+    }
 
+    std::vector<std::unique_ptr<std::remove_pointer_t<VkFramebuffer>, std::function<void(VkFramebuffer)>>>
+      swap_chain_framebuffers;
+    {
       // https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Framebuffers
-
-      std::vector<std::unique_ptr<std::remove_pointer_t<VkFramebuffer>, std::function<void(VkFramebuffer)>>>
-        swap_chain_framebuffers;
 
       for (const auto& swap_chain_image_view : swap_chain_image_views) {
         VkImageView attachments[] = {
@@ -775,24 +794,34 @@ int main(int argc, char** argv)
           vkDestroyFramebuffer(device.get(), framebuffer, nullptr);
         });
       }
+    }
 
+    std::unique_ptr<std::remove_pointer_t<VkCommandPool>, std::function<void(VkCommandPool)>> command_pool{
+      nullptr,
+      [&device](VkCommandPool command_pool) {
+        vkDestroyCommandPool(device.get(), command_pool, nullptr);
+      }
+    };
+    VkCommandBuffer command_buffer;
+    {
       // https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Command_buffers
 
-      VkCommandPool command_pool;
+      {
+        VkCommandPoolCreateInfo pool_info{};
+        pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        pool_info.queueFamilyIndex = queue_family_index.value();
+        VkCommandPool temp_command_pool;
+        if (vkCreateCommandPool(device.get(), &pool_info, nullptr, &temp_command_pool) != VK_SUCCESS) {
+          throw std::runtime_error("failed to create command pool!");
+        }
 
-      VkCommandPoolCreateInfo pool_info{};
-      pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-      pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-      pool_info.queueFamilyIndex = queue_family_index.value();
-      if (vkCreateCommandPool(device.get(), &pool_info, nullptr, &command_pool) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create command pool!");
+        command_pool.reset(temp_command_pool);
       }
-
-      VkCommandBuffer command_buffer;
 
       VkCommandBufferAllocateInfo alloc_info{};
       alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-      alloc_info.commandPool = command_pool;
+      alloc_info.commandPool = command_pool.get();
       alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
       alloc_info.commandBufferCount = 1;
 
@@ -823,7 +852,7 @@ int main(int argc, char** argv)
 
       vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 
-      vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
+      vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline.get());
       {
         VkViewport viewport{};
         viewport.x = 0.0f;
@@ -845,8 +874,6 @@ int main(int argc, char** argv)
       if (vkEndCommandBuffer(command_buffer) != VK_SUCCESS) {
         throw std::runtime_error("failed to record command buffer!");
       }
-
-      std::cout << "HERE\n";
     }
 
     // https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation
@@ -882,7 +909,7 @@ int main(int argc, char** argv)
                             &imageIndex);
 
       std::cout << "image index: " << imageIndex << '\n';
-      // vkResetCommandBuffer(commandBuffer, 0);
+      vkResetCommandBuffer(command_buffer, 0);
 
       vkResetFences(device.get(), 1, &inFlightFence);
       window.swap_buffers();
