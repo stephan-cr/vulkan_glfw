@@ -21,6 +21,7 @@
 #include <functional>
 #include <ios>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <set>
@@ -198,6 +199,58 @@ static void joystick_callback(int jid, int event)
   std::cout.flush();
 }
 
+static void record_command_buffer(std::remove_pointer_t<VkCommandBuffer> &command_buffer,
+                                  std::remove_pointer_t<VkPipeline> &graphics_pipeline,
+                                  std::remove_pointer_t<VkRenderPass> &render_pass,
+                                  std::remove_pointer_t<VkFramebuffer> &swap_chain_framebuffer,
+                                  VkExtent2D &actual_extent)
+{
+  VkCommandBufferBeginInfo begin_info{};
+  begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  begin_info.flags = 0; // Optional
+  begin_info.pInheritanceInfo = nullptr; // Optional
+
+  if (vkBeginCommandBuffer(&command_buffer, &begin_info) != VK_SUCCESS) {
+    throw std::runtime_error("failed to begin recording command buffer!");
+  }
+
+  VkRenderPassBeginInfo render_pass_info{};
+  render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  render_pass_info.renderPass = &render_pass;
+  render_pass_info.framebuffer = &swap_chain_framebuffer;
+  render_pass_info.renderArea.offset = {0, 0};
+  render_pass_info.renderArea.extent = actual_extent;
+
+  VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+  render_pass_info.clearValueCount = 1;
+  render_pass_info.pClearValues = &clearColor;
+
+  vkCmdBeginRenderPass(&command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+
+  vkCmdBindPipeline(&command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, &graphics_pipeline);
+  {
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = static_cast<float>(actual_extent.width);
+    viewport.height = static_cast<float>(actual_extent.height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(&command_buffer, 0, 1, &viewport);
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = actual_extent;
+    vkCmdSetScissor(&command_buffer, 0, 1, &scissor);
+    vkCmdDraw(&command_buffer, 3, 1, 0, 0);
+  }
+
+  vkCmdEndRenderPass(&command_buffer);
+  if (vkEndCommandBuffer(&command_buffer) != VK_SUCCESS) {
+    throw std::runtime_error("failed to record command buffer!");
+  }
+}
+
 int main(int argc, char** argv)
 {
   std::cout << "version: " << get_instance_version() << '\n';
@@ -343,7 +396,7 @@ int main(int argc, char** argv)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
     window.set_key_callback(key_callback);
-    window.make_context_current();
+    // window.make_context_current();
     window.create_window_surface(instance, surface);
 
     // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Swap_chain
@@ -627,12 +680,22 @@ int main(int argc, char** argv)
       subpass.pColorAttachments = &color_attachment_ref;
 
       {
+        VkSubpassDependency dependency{};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
         VkRenderPassCreateInfo render_pass_info{};
         render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         render_pass_info.attachmentCount = 1;
         render_pass_info.pAttachments = &color_attachment;
         render_pass_info.subpassCount = 1;
         render_pass_info.pSubpasses = &subpass;
+        render_pass_info.dependencyCount = 1;
+        render_pass_info.pDependencies = &dependency;
 
         VkRenderPass temp_render_pass;
         if (vkCreateRenderPass(device.get(), &render_pass_info, nullptr, &temp_render_pass) != VK_SUCCESS) {
@@ -802,7 +865,7 @@ int main(int argc, char** argv)
         vkDestroyCommandPool(device.get(), command_pool, nullptr);
       }
     };
-    VkCommandBuffer command_buffer;
+    VkCommandBuffer command_buffer = nullptr;
     {
       // https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Command_buffers
 
@@ -828,52 +891,6 @@ int main(int argc, char** argv)
       if (vkAllocateCommandBuffers(device.get(), &alloc_info, &command_buffer) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate command buffers!");
       }
-
-      VkCommandBufferBeginInfo begin_info{};
-      begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-      begin_info.flags = 0; // Optional
-      begin_info.pInheritanceInfo = nullptr; // Optional
-
-      if (vkBeginCommandBuffer(command_buffer, &begin_info) != VK_SUCCESS) {
-        throw std::runtime_error("failed to begin recording command buffer!");
-      }
-
-      const uint32_t image_index = 0;
-      VkRenderPassBeginInfo render_pass_info{};
-      render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-      render_pass_info.renderPass = render_pass.get();
-      render_pass_info.framebuffer = swap_chain_framebuffers[image_index].get();
-      render_pass_info.renderArea.offset = {0, 0};
-      render_pass_info.renderArea.extent = actual_extent;
-
-      VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-      render_pass_info.clearValueCount = 1;
-      render_pass_info.pClearValues = &clearColor;
-
-      vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
-
-      vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline.get());
-      {
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(actual_extent.width);
-        viewport.height = static_cast<float>(actual_extent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(command_buffer, 0, 1, &viewport);
-
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = actual_extent;
-        vkCmdSetScissor(command_buffer, 0, 1, &scissor);
-        vkCmdDraw(command_buffer, 3, 1, 0, 0);
-      }
-
-      vkCmdEndRenderPass(command_buffer);
-      if (vkEndCommandBuffer(command_buffer) != VK_SUCCESS) {
-        throw std::runtime_error("failed to record command buffer!");
-      }
     }
 
     // https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation
@@ -898,21 +915,57 @@ int main(int argc, char** argv)
     window.show();
     while (!window.should_close()) {
       context.clear();
-      vkWaitForFences(device.get(), 1, &inFlightFence, VK_TRUE, UINT64_MAX);
 
-      uint32_t imageIndex;
+      vkWaitForFences(device.get(), 1, &inFlightFence, VK_TRUE, std::numeric_limits<uint64_t>::max());
+      vkResetFences(device.get(), 1, &inFlightFence);
+
+      uint32_t image_index;
       vkAcquireNextImageKHR(device.get(),
                             swap_chain.get(),
-                            UINT64_MAX,
+                            std::numeric_limits<uint64_t>::max(),
                             imageAvailableSemaphore,
                             VK_NULL_HANDLE,
-                            &imageIndex);
+                            &image_index);
+      std::cout << "image index: " << image_index << '\n';
 
-      std::cout << "image index: " << imageIndex << '\n';
       vkResetCommandBuffer(command_buffer, 0);
 
-      vkResetFences(device.get(), 1, &inFlightFence);
-      window.swap_buffers();
+      record_command_buffer(*command_buffer, *graphics_pipeline, *render_pass,
+                            *swap_chain_framebuffers[image_index], actual_extent);
+
+      // record command buffer
+      VkSubmitInfo submitInfo{};
+      submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+      VkSemaphore waitSemaphores[] = {imageAvailableSemaphore};
+      VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+      submitInfo.waitSemaphoreCount = 1;
+      submitInfo.pWaitSemaphores = waitSemaphores;
+      submitInfo.pWaitDstStageMask = waitStages;
+      submitInfo.commandBufferCount = 1;
+      submitInfo.pCommandBuffers = &command_buffer;
+
+      VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
+      submitInfo.signalSemaphoreCount = 1;
+      submitInfo.pSignalSemaphores = signalSemaphores;
+
+      if (vkQueueSubmit(graphics_queue, 1, &submitInfo, inFlightFence) != VK_SUCCESS) {
+        throw std::runtime_error("failed to submit draw command buffer!");
+      }
+
+      VkPresentInfoKHR presentInfo{};
+      presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+      presentInfo.waitSemaphoreCount = 1;
+      presentInfo.pWaitSemaphores = signalSemaphores;
+      VkSwapchainKHR swapChains[] = {swap_chain.get()};
+      presentInfo.swapchainCount = 1;
+      presentInfo.pSwapchains = swapChains;
+      presentInfo.pImageIndices = &image_index;
+      presentInfo.pResults = nullptr; // Optional
+
+      vkQueuePresentKHR(graphics_queue, &presentInfo);
+
+      // window.swap_buffers();
       context.pool_events();
     }
 
