@@ -304,18 +304,27 @@ int main(int argc, char** argv)
     create_info.enabledLayerCount = 0;
     create_info.pNext = nullptr;
 
-    VkInstance instance;
-    if (vkCreateInstance(&create_info, nullptr, &instance) != VK_SUCCESS) {
-      throw std::runtime_error("Vulkan instance creation failed");
+    std::unique_ptr<std::remove_pointer_t<VkInstance>, void (*)(VkInstance)> instance{
+      nullptr,
+      [](VkInstance instance) { vkDestroyInstance(instance, nullptr); }
+    };
+
+    {
+      VkInstance temp_instance;
+      if (vkCreateInstance(&create_info, nullptr, &temp_instance) != VK_SUCCESS) {
+        throw std::runtime_error("Vulkan instance creation failed");
+      }
+
+      instance.reset(temp_instance);
     }
 
     // https://vulkan-tutorial.com/en/Drawing_a_triangle/Setup/Physical_devices_and_queue_families
     uint32_t device_count = 0;
-    vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
+    vkEnumeratePhysicalDevices(instance.get(), &device_count, nullptr);
     std::cout << "device count: " << device_count << '\n';
 
     std::vector<VkPhysicalDevice> physical_devices(device_count);
-    vkEnumeratePhysicalDevices(instance, &device_count, physical_devices.data());
+    vkEnumeratePhysicalDevices(instance.get(), &device_count, physical_devices.data());
 
     uint32_t queue_family_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[0], &queue_family_count, nullptr);
@@ -376,28 +385,34 @@ int main(int argc, char** argv)
     Window window{640, 480, "My Title"};
 
     // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Window_surface
-    VkSurfaceKHR surface;
+    std::unique_ptr<std::remove_pointer_t<VkSurfaceKHR>, std::function<void(VkSurfaceKHR)>> surface{
+      nullptr,
+      [&instance](VkSurfaceKHR surface) { vkDestroySurfaceKHR(instance.get(), surface, nullptr); }
+    };
+
     {
       VkWaylandSurfaceCreateInfoKHR create_info{};
       create_info.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
       create_info.display = glfwGetWaylandDisplay();
       create_info.surface = glfwGetWaylandWindow(window.raw_glfw_window()); // TODO how to abstract that well
 
-      if (vkCreateWaylandSurfaceKHR(instance, &create_info, nullptr, &surface) != VK_SUCCESS) {
+      VkSurfaceKHR temp_surface;
+      if (vkCreateWaylandSurfaceKHR(instance.get(), &create_info, nullptr, &temp_surface) != VK_SUCCESS) {
         throw std::runtime_error("failed to create window surface!");
       }
+
+      surface.reset(temp_surface);
     }
 
     VkBool32 present_support = VK_FALSE;
-    vkGetPhysicalDeviceSurfaceSupportKHR(physical_devices[0], queue_family_index.value(), surface, &present_support);
+    vkGetPhysicalDeviceSurfaceSupportKHR(physical_devices[0], queue_family_index.value(), surface.get(), &present_support);
     std::cout << std::boolalpha << "present_support: " << present_support << '\n';
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
     window.set_key_callback(key_callback);
-    // window.make_context_current();
-    window.create_window_surface(instance, surface);
+    window.create_window_surface(instance.get(), surface.get());
 
     // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Swap_chain
     std::unique_ptr<std::remove_pointer_t<VkSwapchainKHR>, std::function<void(VkSwapchainKHR)>>
@@ -429,7 +444,7 @@ int main(int argc, char** argv)
         std::cout << extension << '\n';
       }
 
-      vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_devices[0], surface, &details.capabilities);
+      vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_devices[0], surface.get(), &details.capabilities);
       int window_width, window_height;
       std::tie(window_width, window_height) = window.framebuffer_size();
       std::cout << "currentExtent.height: " << details.capabilities.currentExtent.height <<
@@ -445,23 +460,23 @@ int main(int argc, char** argv)
                                         details.capabilities.maxImageExtent.height);
 
       uint32_t format_count;
-      vkGetPhysicalDeviceSurfaceFormatsKHR(physical_devices[0], surface, &format_count, nullptr);
+      vkGetPhysicalDeviceSurfaceFormatsKHR(physical_devices[0], surface.get(), &format_count, nullptr);
 
       if (format_count != 0) {
         details.formats.resize(format_count);
         vkGetPhysicalDeviceSurfaceFormatsKHR(physical_devices[0],
-                                             surface,
+                                             surface.get(),
                                              &format_count,
                                              details.formats.data());
       }
 
       uint32_t present_mode_count;
-      vkGetPhysicalDeviceSurfacePresentModesKHR(physical_devices[0], surface, &present_mode_count, nullptr);
+      vkGetPhysicalDeviceSurfacePresentModesKHR(physical_devices[0], surface.get(), &present_mode_count, nullptr);
 
       if (present_mode_count != 0) {
         details.present_modes.resize(present_mode_count);
         vkGetPhysicalDeviceSurfacePresentModesKHR(physical_devices[0],
-                                                  surface,
+                                                  surface.get(),
                                                   &present_mode_count,
                                                   details.present_modes.data());
       }
@@ -485,7 +500,7 @@ int main(int argc, char** argv)
 
       VkSwapchainCreateInfoKHR create_info{};
       create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-      create_info.surface = surface;
+      create_info.surface = surface.get();
       create_info.minImageCount = image_count;
       create_info.imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
       create_info.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
@@ -895,38 +910,64 @@ int main(int argc, char** argv)
 
     // https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation
 
-    VkSemaphore imageAvailableSemaphore;
-    VkSemaphore renderFinishedSemaphore;
-    VkFence inFlightFence;
+    std::unique_ptr<std::remove_pointer_t<VkSemaphore>, std::function<void(VkSemaphore)>> image_available_semaphore{
+      nullptr,
+      [&device](VkSemaphore semaphore) {
+        vkDestroySemaphore(device.get(), semaphore, nullptr);
+      }
+    };
+    std::unique_ptr<std::remove_pointer_t<VkSemaphore>, std::function<void(VkSemaphore)>> render_finished_semaphore{
+      nullptr,
+      [&device](VkSemaphore semaphore) {
+        vkDestroySemaphore(device.get(), semaphore, nullptr);
+      }
+    };
+    std::unique_ptr<std::remove_pointer_t<VkFence>, std::function<void(VkFence)>> in_flight_fence{
+      nullptr,
+      [&device](VkFence fence) {
+        vkDestroyFence(device.get(), fence, nullptr);
+      }
+    };
 
-    VkSemaphoreCreateInfo semaphoreInfo{};
-    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    {
+      VkSemaphore temp_image_available_semaphore;
+      VkSemaphore temp_render_finished_semaphore;
+      VkFence temp_in_flight_fence;
 
-    VkFenceCreateInfo fenceInfo{};
-    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+      VkSemaphoreCreateInfo semaphoreInfo{};
+      semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-    if (vkCreateSemaphore(device.get(), &semaphoreInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
-        vkCreateSemaphore(device.get(), &semaphoreInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS ||
-        vkCreateFence(device.get(), &fenceInfo, nullptr, &inFlightFence) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create semaphores!");
+      VkFenceCreateInfo fenceInfo{};
+      fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+      fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+      if (vkCreateSemaphore(device.get(), &semaphoreInfo, nullptr, &temp_image_available_semaphore) != VK_SUCCESS ||
+          vkCreateSemaphore(device.get(), &semaphoreInfo, nullptr, &temp_render_finished_semaphore) != VK_SUCCESS ||
+          vkCreateFence(device.get(), &fenceInfo, nullptr, &temp_in_flight_fence) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create semaphores!");
+      }
+
+      image_available_semaphore.reset(temp_image_available_semaphore);
+      render_finished_semaphore.reset(temp_render_finished_semaphore);
+      in_flight_fence.reset(temp_in_flight_fence);
     }
 
     window.show();
     while (!window.should_close()) {
       context.clear();
 
-      vkWaitForFences(device.get(), 1, &inFlightFence, VK_TRUE, std::numeric_limits<uint64_t>::max());
-      vkResetFences(device.get(), 1, &inFlightFence);
+      VkFence fences[] = {in_flight_fence.get()};
+      vkWaitForFences(device.get(), 1, fences, VK_TRUE, std::numeric_limits<uint64_t>::max());
+      vkResetFences(device.get(), 1, fences);
 
       uint32_t image_index;
       vkAcquireNextImageKHR(device.get(),
                             swap_chain.get(),
                             std::numeric_limits<uint64_t>::max(),
-                            imageAvailableSemaphore,
+                            image_available_semaphore.get(),
                             VK_NULL_HANDLE,
                             &image_index);
-      std::cout << "image index: " << image_index << '\n';
+      // std::cout << "image index: " << image_index << '\n';
 
       vkResetCommandBuffer(command_buffer, 0);
 
@@ -937,7 +978,7 @@ int main(int argc, char** argv)
       VkSubmitInfo submitInfo{};
       submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-      VkSemaphore waitSemaphores[] = {imageAvailableSemaphore};
+      VkSemaphore waitSemaphores[] = {image_available_semaphore.get()};
       VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
       submitInfo.waitSemaphoreCount = 1;
       submitInfo.pWaitSemaphores = waitSemaphores;
@@ -945,11 +986,11 @@ int main(int argc, char** argv)
       submitInfo.commandBufferCount = 1;
       submitInfo.pCommandBuffers = &command_buffer;
 
-      VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
+      VkSemaphore signalSemaphores[] = {render_finished_semaphore.get()};
       submitInfo.signalSemaphoreCount = 1;
       submitInfo.pSignalSemaphores = signalSemaphores;
 
-      if (vkQueueSubmit(graphics_queue, 1, &submitInfo, inFlightFence) != VK_SUCCESS) {
+      if (vkQueueSubmit(graphics_queue, 1, &submitInfo, in_flight_fence.get()) != VK_SUCCESS) {
         throw std::runtime_error("failed to submit draw command buffer!");
       }
 
@@ -965,7 +1006,6 @@ int main(int argc, char** argv)
 
       vkQueuePresentKHR(graphics_queue, &presentInfo);
 
-      // window.swap_buffers();
       context.pool_events();
     }
 
