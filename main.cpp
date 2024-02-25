@@ -880,7 +880,12 @@ int main(int argc, char** argv)
         vkDestroyCommandPool(device.get(), command_pool, nullptr);
       }
     };
-    VkCommandBuffer command_buffer = nullptr;
+    std::unique_ptr<std::remove_pointer_t<VkCommandBuffer>, std::function<void(VkCommandBuffer)>> command_buffer{
+      nullptr,
+      [&device, &command_pool](VkCommandBuffer command_buffer) {
+        vkFreeCommandBuffers(device.get(), command_pool.get(), 1, &command_buffer);
+      }
+    };
     {
       // https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Command_buffers
 
@@ -903,9 +908,12 @@ int main(int argc, char** argv)
       alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
       alloc_info.commandBufferCount = 1;
 
-      if (vkAllocateCommandBuffers(device.get(), &alloc_info, &command_buffer) != VK_SUCCESS) {
+      VkCommandBuffer temp_command_buffer;
+      if (vkAllocateCommandBuffers(device.get(), &alloc_info, &temp_command_buffer) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate command buffers!");
       }
+
+      command_buffer.reset(temp_command_buffer);
     }
 
     // https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation
@@ -969,7 +977,7 @@ int main(int argc, char** argv)
                             &image_index);
       // std::cout << "image index: " << image_index << '\n';
 
-      vkResetCommandBuffer(command_buffer, 0);
+      vkResetCommandBuffer(command_buffer.get(), 0);
 
       record_command_buffer(*command_buffer, *graphics_pipeline, *render_pass,
                             *swap_chain_framebuffers[image_index], actual_extent);
@@ -984,7 +992,8 @@ int main(int argc, char** argv)
       submitInfo.pWaitSemaphores = waitSemaphores;
       submitInfo.pWaitDstStageMask = waitStages;
       submitInfo.commandBufferCount = 1;
-      submitInfo.pCommandBuffers = &command_buffer;
+      VkCommandBuffer command_buffers[] = {command_buffer.get()};
+      submitInfo.pCommandBuffers = command_buffers;
 
       VkSemaphore signalSemaphores[] = {render_finished_semaphore.get()};
       submitInfo.signalSemaphoreCount = 1;
