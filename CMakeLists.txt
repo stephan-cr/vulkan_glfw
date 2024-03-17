@@ -4,6 +4,7 @@ project(vulkan_sample LANGUAGES CXX)
 
 # in GLFW < 3.3, the gamepad wouldn't work
 find_package(glfw3 3.3 REQUIRED)
+find_package(glm REQUIRED)
 find_package(Vulkan REQUIRED COMPONENTS glslc)
 
 include(CheckPIESupported)
@@ -52,6 +53,7 @@ set_property(TARGET sample PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(sample
   PRIVATE
   glfw
+  glm::glm
   Vulkan::Vulkan
 )
 

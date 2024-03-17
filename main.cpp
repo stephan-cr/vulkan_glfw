@@ -12,9 +12,13 @@
 #define GLFW_EXPOSE_NATIVE_WAYLAND
 #include "GLFW/glfw3native.h"
 
+#include "glm/vec2.hpp"
+#include "glm/vec3.hpp"
+
 #include "allocator.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <fstream>
@@ -119,6 +123,7 @@ public:
     glfwSetKeyCallback(window.get(), callback);
   }
 
+  [[deprecated]]
   void make_context_current()
   {
     glfwMakeContextCurrent(window.get());
@@ -135,6 +140,7 @@ public:
     // glfwShowWindow(window.get());
   }
 
+  [[deprecated]]
   void swap_buffers()
   {
     glfwSwapBuffers(window.get());
@@ -172,6 +178,44 @@ private:
   std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)> window;
 };
 
+struct Vertex {
+  glm::vec2 pos;
+  glm::vec3 color;
+
+  static VkVertexInputBindingDescription getBindingDescription()
+  {
+    VkVertexInputBindingDescription bindingDescription{};
+    bindingDescription.binding = 0;
+    bindingDescription.stride = sizeof(Vertex);
+    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    return bindingDescription;
+  }
+
+  static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions()
+  {
+    std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+
+    attributeDescriptions[0].binding = 0;
+    attributeDescriptions[0].location = 0;
+    attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    attributeDescriptions[0].offset = offsetof(Vertex, pos);
+
+    attributeDescriptions[1].binding = 0;
+    attributeDescriptions[1].location = 1;
+    attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+    return attributeDescriptions;
+  }
+};
+
+const std::vector<Vertex> vertices = {
+  {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+  {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+  {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+};
+
 static void error_callback(int code, const char* description)
 {
   std::cerr << "error: " << code << ", " << description << '\n';
@@ -203,7 +247,8 @@ static void record_command_buffer(std::remove_pointer_t<VkCommandBuffer> &comman
                                   std::remove_pointer_t<VkPipeline> &graphics_pipeline,
                                   std::remove_pointer_t<VkRenderPass> &render_pass,
                                   std::remove_pointer_t<VkFramebuffer> &swap_chain_framebuffer,
-                                  VkExtent2D &actual_extent)
+                                  VkExtent2D &actual_extent,
+                                  VkBuffer &vertex_buffer)
 {
   VkCommandBufferBeginInfo begin_info{};
   begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -228,6 +273,10 @@ static void record_command_buffer(std::remove_pointer_t<VkCommandBuffer> &comman
   vkCmdBeginRenderPass(&command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 
   vkCmdBindPipeline(&command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, &graphics_pipeline);
+  VkBuffer vertexBuffers[] = {vertex_buffer};
+  VkDeviceSize offsets[] = {0};
+  vkCmdBindVertexBuffers(&command_buffer, 0, 1, vertexBuffers, offsets);
+
   {
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -306,7 +355,7 @@ int main(int argc, char** argv)
 
     std::unique_ptr<std::remove_pointer_t<VkInstance>, void (*)(VkInstance)> instance{
       nullptr,
-      [](VkInstance instance) { vkDestroyInstance(instance, nullptr); }
+        [](VkInstance instance) { vkDestroyInstance(instance, nullptr); }
     };
 
     {
@@ -382,7 +431,7 @@ int main(int argc, char** argv)
     VkQueue graphics_queue;
     vkGetDeviceQueue(device.get(), queue_family_index.value(), 0, &graphics_queue);
 
-    Window window{640, 480, "My Title"};
+    Window window{640, 480, "Vulkan"};
 
     // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Window_surface
     std::unique_ptr<std::remove_pointer_t<VkSurfaceKHR>, std::function<void(VkSurfaceKHR)>> surface{
@@ -732,10 +781,20 @@ int main(int argc, char** argv)
 
       VkPipelineVertexInputStateCreateInfo vertex_input_info{};
       vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+#if 0
       vertex_input_info.vertexBindingDescriptionCount = 0;
       vertex_input_info.pVertexBindingDescriptions = nullptr; // Optional
       vertex_input_info.vertexAttributeDescriptionCount = 0;
       vertex_input_info.pVertexAttributeDescriptions = nullptr; // Optional
+#endif
+
+      auto bindingDescription = Vertex::getBindingDescription();
+      auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
+      vertex_input_info.vertexBindingDescriptionCount = 1;
+      vertex_input_info.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+      vertex_input_info.pVertexBindingDescriptions = &bindingDescription;
+      vertex_input_info.pVertexAttributeDescriptions = attributeDescriptions.data();
 
       VkPipelineInputAssemblyStateCreateInfo input_assembly{};
       input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -960,6 +1019,60 @@ int main(int argc, char** argv)
       in_flight_fence.reset(temp_in_flight_fence);
     }
 
+    // TODO add vertex buffers: https://vulkan-tutorial.com/Vertex_buffers/Vertex_input_description
+
+    VkBuffer vertex_buffer;
+    VkBufferCreateInfo buffer_info{};
+    buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    buffer_info.size = sizeof(vertices[0]) * vertices.size();
+    buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateBuffer(device.get(), &buffer_info, nullptr, &vertex_buffer) != VK_SUCCESS) {
+      throw std::runtime_error("failed to create vertex buffer!");
+    }
+
+    VkMemoryRequirements mem_requirements;
+    vkGetBufferMemoryRequirements(device.get(), vertex_buffer, &mem_requirements);
+    std::cout << "memory requirements size: " << mem_requirements.size << '\n';
+
+    VkPhysicalDeviceMemoryProperties mem_properties;
+    vkGetPhysicalDeviceMemoryProperties(physical_devices[0], &mem_properties);
+
+    const uint32_t type_filter = mem_requirements.memoryTypeBits;
+    const VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+    VkDeviceMemory vertex_buffer_memory;
+    {
+      assert(mem_properties.memoryTypeCount < sizeof(type_filter) * 8);
+      uint32_t index = 0U;
+      const auto suitable_memory_type =
+        std::find_if(&mem_properties.memoryTypes[0], &mem_properties.memoryTypes[mem_properties.memoryTypeCount],
+                     [&index, &properties, &type_filter](const auto& element) {
+                       return ((type_filter & (1 << index++)) && (element.propertyFlags & properties) == properties);
+                     });
+
+      if (suitable_memory_type == &mem_properties.memoryTypes[mem_properties.memoryTypeCount]) {
+        throw std::runtime_error("no suitable memory found");
+      }
+
+      VkMemoryAllocateInfo alloc_info{};
+      alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      alloc_info.allocationSize = mem_requirements.size;
+      alloc_info.memoryTypeIndex = index - 1;
+
+      if (vkAllocateMemory(device.get(), &alloc_info, nullptr, &vertex_buffer_memory) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate vertex buffer memory!");
+      }
+    }
+
+    vkBindBufferMemory(device.get(), vertex_buffer, vertex_buffer_memory, 0);
+
+    void* data;
+    vkMapMemory(device.get(), vertex_buffer_memory, 0, buffer_info.size, 0, &data);
+    memcpy(data, vertices.data(), (size_t) buffer_info.size);
+    vkUnmapMemory(device.get(), vertex_buffer_memory);
+
     window.show();
     while (!window.should_close()) {
       context.clear();
@@ -980,7 +1093,7 @@ int main(int argc, char** argv)
       vkResetCommandBuffer(command_buffer.get(), 0);
 
       record_command_buffer(*command_buffer, *graphics_pipeline, *render_pass,
-                            *swap_chain_framebuffers[image_index], actual_extent);
+                            *swap_chain_framebuffers[image_index], actual_extent, vertex_buffer);
 
       // record command buffer
       VkSubmitInfo submitInfo{};
