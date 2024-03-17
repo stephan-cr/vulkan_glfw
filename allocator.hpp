@@ -32,9 +32,19 @@ public:
 };
 
 template<typename T, typename U, typename AlignAsT>
-bool operator==(const AlignedAllocator<T, AlignAsT>&, const AlignedAllocator<U, AlignAsT>&) { return true; }
+bool
+operator==(const AlignedAllocator<T, AlignAsT>&,
+           const AlignedAllocator<U, AlignAsT>&) noexcept
+{
+  return true;
+}
 
 template<typename T, typename U, typename AlignAsT>
-bool operator!=(const AlignedAllocator<T, AlignAsT>&, const AlignedAllocator<U, AlignAsT>&) { return false; }
+bool
+operator!=(const AlignedAllocator<T, AlignAsT>&,
+           const AlignedAllocator<U, AlignAsT>&) noexcept
+{
+  return false;
+}
 
 #endif // ALLOCATOR_HPP

@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.24)
 project(vulkan_sample LANGUAGES CXX)
 
 # in GLFW < 3.3, the gamepad wouldn't work
+find_package(Catch2 REQUIRED)
 find_package(glfw3 3.3 REQUIRED)
 find_package(glm REQUIRED)
 find_package(Vulkan REQUIRED COMPONENTS glslc)
@@ -65,3 +66,7 @@ target_link_libraries(joy
   PRIVATE
   glfw
 )
+
+add_executable(test_allocator test_allocator.cpp)
+target_compile_features(test_allocator PRIVATE cxx_std_17)
+target_link_libraries(test_allocator PRIVATE Catch2::Catch2WithMain)
