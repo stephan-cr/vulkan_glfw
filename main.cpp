@@ -309,8 +309,9 @@ int main(int argc, char** argv)
   cxxopts::Options options(argv[0], "Vulkan tutorial");
   options.add_options()
     // ("b,bar", "Param bar", cxxopts::value<std::string>())
+    ("w,width", "window width", cxxopts::value<int>()->default_value("640"))
+    ("x,height", "window height", cxxopts::value<int>()->default_value("480"))
     ("d,debug", "Enable debugging", cxxopts::value<bool>()->default_value("false"))
-    // ("f,foo", "Param foo", cxxopts::value<int>()->default_value("10"))
     ("vert_shader", "vertex shader", cxxopts::value<std::string>())
     ("frag_shader", "fragment shader", cxxopts::value<std::string>())
     ("h,help", "Print usage");
@@ -478,7 +479,7 @@ int main(int argc, char** argv)
     VkQueue graphics_queue;
     vkGetDeviceQueue(device.get(), queue_family_index.value(), 0, &graphics_queue);
 
-    Window window{640, 480, "Vulkan"};
+    Window window{parse_result["width"].as<int>(), parse_result["height"].as<int>(), "Vulkan"};
 
     // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Window_surface
     std::unique_ptr<std::remove_pointer_t<VkSurfaceKHR>, std::function<void(VkSurfaceKHR)>> surface{

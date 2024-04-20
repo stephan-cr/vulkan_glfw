@@ -52,7 +52,7 @@ add_dependencies(sample vert_spirv)
 add_dependencies(sample frag_spirv)
 target_compile_features(sample PRIVATE cxx_std_17)
 set_property(TARGET sample PROPERTY POSITION_INDEPENDENT_CODE ON)
-target_precompile_headers(sample PRIVATE allocator.hpp cxxopts.hpp)
+target_precompile_headers(sample PRIVATE allocator.hpp [["cxxopts.hpp"]])
 target_link_libraries(sample
   PRIVATE
   cxxopts::cxxopts
