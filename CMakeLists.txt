@@ -4,6 +4,7 @@ project(vulkan_sample LANGUAGES CXX)
 
 # in GLFW < 3.3, the gamepad wouldn't work
 find_package(Catch2 REQUIRED)
+find_package(cxxopts REQUIRED)
 find_package(glfw3 3.3 REQUIRED)
 find_package(glm REQUIRED)
 find_package(Vulkan REQUIRED COMPONENTS glslc)
@@ -53,6 +54,7 @@ target_compile_features(sample PRIVATE cxx_std_17)
 set_property(TARGET sample PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(sample
   PRIVATE
+  cxxopts::cxxopts
   glfw
   glm::glm
   Vulkan::Vulkan

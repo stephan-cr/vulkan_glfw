@@ -15,6 +15,8 @@
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
 
+#include "cxxopts.hpp"
+
 #include "allocator.hpp"
 
 #include <algorithm>
@@ -304,6 +306,22 @@ static void record_command_buffer(std::remove_pointer_t<VkCommandBuffer> &comman
 
 int main(int argc, char** argv)
 {
+  cxxopts::Options options(argv[0], "Vulkan tutorial");
+  options.add_options()
+    // ("b,bar", "Param bar", cxxopts::value<std::string>())
+    ("d,debug", "Enable debugging", cxxopts::value<bool>()->default_value("false"))
+    // ("f,foo", "Param foo", cxxopts::value<int>()->default_value("10"))
+    ("vert_shader", "vertex shader", cxxopts::value<std::string>())
+    ("frag_shader", "fragment shader", cxxopts::value<std::string>())
+    ("h,help", "Print usage");
+  options.parse_positional({"vert_shader", "frag_shader"});
+  const auto parse_result = options.parse(argc, argv);
+
+  if (parse_result.count("help")) {
+    std::cout << options.help() << std::endl;
+    return 0;
+  }
+
   std::cout << "version: " << get_instance_version() << '\n';
 
   try {
@@ -374,7 +392,7 @@ int main(int argc, char** argv)
     create_info.pApplicationInfo = &app_info;
     create_info.enabledExtensionCount = required_extensions_count;
     create_info.ppEnabledExtensionNames = required_extensions;
-    if (true) {
+    if (parse_result["debug"].as<bool>()) {
       create_info.enabledLayerCount = static_cast<uint32_t>(validation_layers.size());
       create_info.ppEnabledLayerNames = validation_layers.data();
     } else {
@@ -651,7 +669,7 @@ int main(int argc, char** argv)
     {
       // https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Shader_modules
       {
-        std::ifstream file(argv[1], std::ios::ate | std::ios::binary);
+        std::ifstream file(parse_result["vert_shader"].as<std::string>(), std::ios::ate | std::ios::binary);
         if (!file.is_open()) {
           throw std::runtime_error("failed to open file!");
         }
@@ -674,7 +692,7 @@ int main(int argc, char** argv)
       }
 
       {
-        std::ifstream file(argv[2], std::ios::ate | std::ios::binary);
+        std::ifstream file(parse_result["frag_shader"].as<std::string>(), std::ios::ate | std::ios::binary);
         if (!file.is_open()) {
           throw std::runtime_error("failed to open file!");
         }
