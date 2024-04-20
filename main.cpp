@@ -21,10 +21,12 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <ios>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -319,23 +321,45 @@ int main(int argc, char** argv)
     uint32_t required_extensions_count;
     const char** required_extensions = glfwGetRequiredInstanceExtensions(&required_extensions_count);
 
+    std::cout << "required extensions:\n";
     if (required_extensions != nullptr) {
       for (uint32_t i = 0; i < required_extensions_count; ++i) {
-        std::cout << required_extensions[i] << '\n';
+        std::cout << '\t' << required_extensions[i] << '\n';
       }
     }
 
     uint32_t extension_count = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
 
-    std::cout << "available extension count " << extension_count << '\n';
-
     std::vector<VkExtensionProperties> available_extensions{extension_count};
     vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, available_extensions.data());
 
+    std::cout << "available extensions:\n";
+    std::cout << "\tavailable extension count " << extension_count << '\n';
     for (const auto &extension : available_extensions) {
       std::cout << '\t' << extension.extensionName << '\n';
     }
+
+    std::cout << "layers:\n";
+    uint32_t layer_count;
+    vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
+    std::cout << "\tlayer count " << layer_count << '\n';
+
+    std::vector<VkLayerProperties> available_layers(layer_count);
+    vkEnumerateInstanceLayerProperties(&layer_count, available_layers.data());
+    for (const auto &layer : available_layers) {
+      std::cout << '\t' << layer.layerName << '\n';
+    }
+
+    const std::array<const char*, 1> validation_layers{
+      "VK_LAYER_KHRONOS_validation"
+    };
+    auto validation_layer_found = std::find_if(std::begin(available_layers), std::end(available_layers),
+                                               [](auto& layer) {
+                                                 return strcmp(layer.layerName, "VK_LAYER_KHRONOS_validation") == 0;
+                                               });
+    if (validation_layer_found == available_layers.end())
+      throw std::runtime_error("validation layer not available");
 
     VkApplicationInfo app_info = {};
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -350,7 +374,12 @@ int main(int argc, char** argv)
     create_info.pApplicationInfo = &app_info;
     create_info.enabledExtensionCount = required_extensions_count;
     create_info.ppEnabledExtensionNames = required_extensions;
-    create_info.enabledLayerCount = 0;
+    if (true) {
+      create_info.enabledLayerCount = static_cast<uint32_t>(validation_layers.size());
+      create_info.ppEnabledLayerNames = validation_layers.data();
+    } else {
+      create_info.enabledLayerCount = 0;
+    }
     create_info.pNext = nullptr;
 
     std::unique_ptr<std::remove_pointer_t<VkInstance>, void (*)(VkInstance)> instance{
@@ -490,7 +519,7 @@ int main(int argc, char** argv)
       }
 
       for (const auto& extension: available_extension_set) {
-        std::cout << extension << '\n';
+        std::cout << '\t' << extension << '\n';
       }
 
       vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_devices[0], surface.get(), &details.capabilities);
