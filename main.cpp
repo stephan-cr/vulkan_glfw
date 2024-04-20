@@ -252,7 +252,7 @@ static void record_command_buffer(std::remove_pointer_t<VkCommandBuffer> &comman
                                   std::remove_pointer_t<VkRenderPass> &render_pass,
                                   std::remove_pointer_t<VkFramebuffer> &swap_chain_framebuffer,
                                   VkExtent2D &actual_extent,
-                                  VkBuffer &vertex_buffer)
+                                  VkBuffer vertex_buffer)
 {
   VkCommandBufferBeginInfo begin_info{};
   begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -371,7 +371,7 @@ int main(int argc, char** argv)
 
     const std::array<const char*, 1> validation_layers{
       "VK_LAYER_KHRONOS_validation"
-    };
+        };
     auto validation_layer_found = std::find_if(std::begin(available_layers), std::end(available_layers),
                                                [](auto& layer) {
                                                  return strcmp(layer.layerName, "VK_LAYER_KHRONOS_validation") == 0;
@@ -402,7 +402,7 @@ int main(int argc, char** argv)
 
     std::unique_ptr<std::remove_pointer_t<VkInstance>, void (*)(VkInstance)> instance{
       nullptr,
-        [](VkInstance instance) { vkDestroyInstance(instance, nullptr); }
+      [](VkInstance instance) { vkDestroyInstance(instance, nullptr); }
     };
 
     {
@@ -603,6 +603,14 @@ int main(int argc, char** argv)
       create_info.imageExtent = actual_extent;
       create_info.imageArrayLayers = 1;
       create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+      if (details.capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+        create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+      else
+        throw std::runtime_error("VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR not supported");
+      if (details.capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+        create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+      else
+        throw std::runtime_error("VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR not supported");
 
       {
         VkSwapchainKHR temp_swap_chain;
@@ -1068,19 +1076,30 @@ int main(int argc, char** argv)
 
     // TODO add vertex buffers: https://vulkan-tutorial.com/Vertex_buffers/Vertex_input_description
 
-    VkBuffer vertex_buffer;
     VkBufferCreateInfo buffer_info{};
     buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     buffer_info.size = sizeof(vertices[0]) * vertices.size();
     buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
     buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    if (vkCreateBuffer(device.get(), &buffer_info, nullptr, &vertex_buffer) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create vertex buffer!");
+    std::unique_ptr<std::remove_pointer_t<VkBuffer>, std::function<void(VkBuffer)>> vertex_buffer{
+      nullptr,
+      [&device](VkBuffer buffer) {
+        vkDestroyBuffer(device.get(), buffer, nullptr);
+      }
+    };
+
+    {
+      VkBuffer temp_buffer;
+      if (vkCreateBuffer(device.get(), &buffer_info, nullptr, &temp_buffer) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create vertex buffer!");
+      }
+
+      vertex_buffer.reset(temp_buffer);
     }
 
     VkMemoryRequirements mem_requirements;
-    vkGetBufferMemoryRequirements(device.get(), vertex_buffer, &mem_requirements);
+    vkGetBufferMemoryRequirements(device.get(), vertex_buffer.get(), &mem_requirements);
     std::cout << "memory requirements size: " << mem_requirements.size << '\n';
 
     VkPhysicalDeviceMemoryProperties mem_properties;
@@ -1089,7 +1108,12 @@ int main(int argc, char** argv)
     const uint32_t type_filter = mem_requirements.memoryTypeBits;
     const VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
-    VkDeviceMemory vertex_buffer_memory;
+    std::unique_ptr<std::remove_pointer_t<VkDeviceMemory>, std::function<void(VkDeviceMemory)>> vertex_buffer_memory{
+      nullptr,
+      [&device](VkDeviceMemory mem) {
+        vkFreeMemory(device.get(), mem, nullptr);
+      }
+    };
     {
       assert(mem_properties.memoryTypeCount < sizeof(type_filter) * 8);
       uint32_t index = 0U;
@@ -1108,17 +1132,20 @@ int main(int argc, char** argv)
       alloc_info.allocationSize = mem_requirements.size;
       alloc_info.memoryTypeIndex = index - 1;
 
-      if (vkAllocateMemory(device.get(), &alloc_info, nullptr, &vertex_buffer_memory) != VK_SUCCESS) {
+      VkDeviceMemory temp_vertex_buffer_memory;
+      if (vkAllocateMemory(device.get(), &alloc_info, nullptr, &temp_vertex_buffer_memory) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate vertex buffer memory!");
       }
+
+      vertex_buffer_memory.reset(temp_vertex_buffer_memory);
     }
 
-    vkBindBufferMemory(device.get(), vertex_buffer, vertex_buffer_memory, 0);
+    vkBindBufferMemory(device.get(), vertex_buffer.get(), vertex_buffer_memory.get(), 0);
 
     void* data;
-    vkMapMemory(device.get(), vertex_buffer_memory, 0, buffer_info.size, 0, &data);
+    vkMapMemory(device.get(), vertex_buffer_memory.get(), 0, buffer_info.size, 0, &data);
     memcpy(data, vertices.data(), (size_t) buffer_info.size);
-    vkUnmapMemory(device.get(), vertex_buffer_memory);
+    vkUnmapMemory(device.get(), vertex_buffer_memory.get());
 
     window.show();
     while (!window.should_close()) {
@@ -1140,7 +1167,7 @@ int main(int argc, char** argv)
       vkResetCommandBuffer(command_buffer.get(), 0);
 
       record_command_buffer(*command_buffer, *graphics_pipeline, *render_pass,
-                            *swap_chain_framebuffers[image_index], actual_extent, vertex_buffer);
+                            *swap_chain_framebuffers[image_index], actual_extent, vertex_buffer.get());
 
       // record command buffer
       VkSubmitInfo submitInfo{};
