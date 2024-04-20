@@ -115,11 +115,14 @@ public:
     }
   }
 
-  void create_window_surface(VkInstance instance, VkSurfaceKHR surface)
+  VkSurfaceKHR create_window_surface(VkInstance instance)
   {
+    VkSurfaceKHR surface;
     if (glfwCreateWindowSurface(instance, window.get(), nullptr, &surface) != VK_SUCCESS) {
       throw std::runtime_error("create window surface failed");
     }
+
+    return surface;
   }
 
   void set_key_callback(void (*callback)(GLFWwindow*, int, int, int, int))
@@ -483,23 +486,9 @@ int main(int argc, char** argv)
 
     // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Window_surface
     std::unique_ptr<std::remove_pointer_t<VkSurfaceKHR>, std::function<void(VkSurfaceKHR)>> surface{
-      nullptr,
+      window.create_window_surface(instance.get()),
       [&instance](VkSurfaceKHR surface) { vkDestroySurfaceKHR(instance.get(), surface, nullptr); }
     };
-
-    {
-      VkWaylandSurfaceCreateInfoKHR create_info{};
-      create_info.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
-      create_info.display = glfwGetWaylandDisplay();
-      create_info.surface = glfwGetWaylandWindow(window.raw_glfw_window()); // TODO how to abstract that well
-
-      VkSurfaceKHR temp_surface;
-      if (vkCreateWaylandSurfaceKHR(instance.get(), &create_info, nullptr, &temp_surface) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create window surface!");
-      }
-
-      surface.reset(temp_surface);
-    }
 
     VkBool32 present_support = VK_FALSE;
     vkGetPhysicalDeviceSurfaceSupportKHR(physical_devices[0], queue_family_index.value(), surface.get(), &present_support);
@@ -509,7 +498,6 @@ int main(int argc, char** argv)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
     window.set_key_callback(key_callback);
-    window.create_window_surface(instance.get(), surface.get());
 
     // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Swap_chain
     std::unique_ptr<std::remove_pointer_t<VkSwapchainKHR>, std::function<void(VkSwapchainKHR)>>
