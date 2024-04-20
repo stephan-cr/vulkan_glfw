@@ -25,7 +25,7 @@ macro(add_shader target type input output)
     OUTPUT
     ${output}
     COMMAND
-    Vulkan::glslc -fshader-stage=${type} -o ${output} ${input}
+    Vulkan::glslc -fshader-stage=${type} -o ${output} ${input} $<$<CONFIG:Release>:-O> $<$<CONFIG:Debug>:-g>
     DEPENDS
     ${input}
     COMMENT "compiling ${input}")
@@ -46,8 +46,8 @@ target_link_options(sample PRIVATE
   $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:Clang,GNU>>:-fsanitize=undefined>
   $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:Clang>>:-fsanitize=memory>
 )
-add_shader(vert_spirv vertex ${CMAKE_SOURCE_DIR}/vert.glsl vert.spv)
-add_shader(frag_spirv frag ${CMAKE_SOURCE_DIR}/frag.glsl frag.spv)
+add_shader(vert_spirv vertex ${CMAKE_SOURCE_DIR}/vert.glsl $<CONFIG>/vert.spv)
+add_shader(frag_spirv frag ${CMAKE_SOURCE_DIR}/frag.glsl $<CONFIG>/frag.spv)
 add_dependencies(sample vert_spirv)
 add_dependencies(sample frag_spirv)
 target_compile_features(sample PRIVATE cxx_std_17)
