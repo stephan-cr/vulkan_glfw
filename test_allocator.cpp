@@ -2,6 +2,7 @@
 
 #include "catch2/catch_test_macros.hpp"
 
+#include <cstddef>
 #include <memory>
 #include <type_traits>
 
@@ -15,24 +16,29 @@ TEST_CASE("allocators are equal", "[allocator]")
 
 TEST_CASE("allocator is able to allocate memory", "[allocator]")
 {
-  AlignedAllocator<int, unsigned> a;
+  using Allocator_ = AlignedAllocator<int, unsigned>;
+  Allocator_ a;
 
   int *p = a.allocate(10);
+  REQUIRE(p != nullptr);
+  REQUIRE(reinterpret_cast<std::size_t>(p) % sizeof(Allocator_::align_as_type) == 0);
   a.deallocate(p, 10);
 
-  using Allocator_ = AlignedAllocator<int, unsigned>;
+  REQUIRE(std::allocator_traits<Allocator_>::max_size(a) > 0);
   int *p2 = std::allocator_traits<Allocator_>::allocate(a, 23);
+  REQUIRE(p2 != nullptr);
   std::allocator_traits<Allocator_>::deallocate(a, p2, 23);
 }
 
-static_assert(
-  std::is_same<
-    std::allocator_traits<AlignedAllocator<int, unsigned>>::value_type,
-    AlignedAllocator<int, unsigned>::value_type>::value,
-  "value_type must be set");
+TEST_CASE("allocator implements allocator traits correctly", "[allocator]")
+{
+  STATIC_REQUIRE(
+                 std::is_same<
+                 std::allocator_traits<AlignedAllocator<int, unsigned>>::value_type,
+                 AlignedAllocator<int, unsigned>::value_type>::value);
 
-static_assert(
-  std::is_same<
-    std::allocator_traits<AlignedAllocator<int, unsigned>>::pointer,
-    AlignedAllocator<int, unsigned>::value_type*>::value,
-  "pointer_type must be set");
+  STATIC_REQUIRE(
+                 std::is_same<
+                 std::allocator_traits<AlignedAllocator<int, unsigned>>::pointer,
+                 AlignedAllocator<int, unsigned>::value_type*>::value);
+}

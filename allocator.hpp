@@ -12,6 +12,7 @@ class AlignedAllocator
 {
 public:
   using value_type = T;
+  using align_as_type = AlignAsT;
 
   [[nodiscard]] T* allocate(std::size_t n)
   {
