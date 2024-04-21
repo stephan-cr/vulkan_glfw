@@ -18,6 +18,7 @@
 #include "cxxopts.hpp"
 
 #include "allocator.hpp"
+#include "executable_info.hpp"
 
 #include <algorithm>
 #include <array>
@@ -33,6 +34,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <tuple>
@@ -309,16 +311,14 @@ static void record_command_buffer(std::remove_pointer_t<VkCommandBuffer> &comman
 
 int main(int argc, char** argv)
 {
+  const auto executable_dir = get_executable_path().parent_path();
   cxxopts::Options options(argv[0], "Vulkan tutorial");
   options.add_options()
     // ("b,bar", "Param bar", cxxopts::value<std::string>())
     ("w,width", "window width", cxxopts::value<int>()->default_value("640"))
     ("x,height", "window height", cxxopts::value<int>()->default_value("480"))
     ("d,debug", "Enable debugging", cxxopts::value<bool>()->default_value("false"))
-    ("vert_shader", "vertex shader", cxxopts::value<std::string>())
-    ("frag_shader", "fragment shader", cxxopts::value<std::string>())
     ("h,help", "Print usage");
-  options.parse_positional({"vert_shader", "frag_shader"});
   const auto parse_result = options.parse(argc, argv);
 
   if (parse_result.count("help")) {
@@ -666,9 +666,11 @@ int main(int argc, char** argv)
     {
       // https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Shader_modules
       {
-        std::ifstream file(parse_result["vert_shader"].as<std::string>(), std::ios::ate | std::ios::binary);
+        std::ifstream file(executable_dir / "vert.spv", std::ios::ate | std::ios::binary);
         if (!file.is_open()) {
-          throw std::runtime_error("failed to open file!");
+          std::ostringstream oss;
+          oss << "failed to open file \"" << (executable_dir / "vert.spv") << '\"';
+          throw std::runtime_error(oss.str());
         }
         const size_t file_size = (size_t) file.tellg();
         std::vector<char, AlignedAllocator<char, uint32_t>> code(file_size);
@@ -689,9 +691,11 @@ int main(int argc, char** argv)
       }
 
       {
-        std::ifstream file(parse_result["frag_shader"].as<std::string>(), std::ios::ate | std::ios::binary);
+        std::ifstream file(executable_dir / "frag.spv", std::ios::ate | std::ios::binary);
         if (!file.is_open()) {
-          throw std::runtime_error("failed to open file!");
+          std::ostringstream oss;
+          oss << "failed to open file \"" << (executable_dir / "frag.spv") << '\"';
+          throw std::runtime_error(oss.str());
         }
         const size_t file_size = (size_t) file.tellg();
         std::vector<char, AlignedAllocator<char, uint32_t>> code(file_size);
