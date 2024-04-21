@@ -2,15 +2,13 @@
 // https://www.glfw.org/docs/latest/vulkan_guide.html
 
 #define VK_USE_PLATFORM_WAYLAND_KHR
-#include "vulkan/vulkan.hpp"
-#include <vulkan/vulkan_enums.hpp>
-#include "vulkan/vulkan_to_string.hpp"
-#include "vulkan/vulkan_core.h"
 #include "vulkan/vulkan.h"
+#include "vulkan/vulkan.hpp"
+#include "vulkan/vulkan_core.h"
+#include "vulkan/vulkan_enums.hpp"
+#include "vulkan/vulkan_to_string.hpp"
 
 #include "GLFW/glfw3.h"
-#define GLFW_EXPOSE_NATIVE_WAYLAND
-#include "GLFW/glfw3native.h"
 
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
@@ -1067,7 +1065,7 @@ int main(int argc, char** argv)
       in_flight_fence.reset(temp_in_flight_fence);
     }
 
-    // TODO add vertex buffers: https://vulkan-tutorial.com/Vertex_buffers/Vertex_input_description
+    // vertex buffers: https://vulkan-tutorial.com/Vertex_buffers/Vertex_input_description
 
     VkBufferCreateInfo buffer_info{};
     buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1155,7 +1153,6 @@ int main(int argc, char** argv)
                             image_available_semaphore.get(),
                             VK_NULL_HANDLE,
                             &image_index);
-      // std::cout << "image index: " << image_index << '\n';
 
       vkResetCommandBuffer(command_buffer.get(), 0);
 

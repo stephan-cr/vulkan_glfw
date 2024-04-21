@@ -34,6 +34,7 @@ macro(add_shader target type input output)
 endmacro()
 
 add_executable(sample
+  executable_info.cpp
   main.cpp)
 target_compile_options(sample PRIVATE
   $<$<CXX_COMPILER_ID:Clang,GNU>:-Wall;-Wextra;-Wconversion;-Wno-unused-parameter>
@@ -52,7 +53,11 @@ add_dependencies(sample vert_spirv)
 add_dependencies(sample frag_spirv)
 target_compile_features(sample PRIVATE cxx_std_17)
 set_property(TARGET sample PROPERTY POSITION_INDEPENDENT_CODE ON)
-target_precompile_headers(sample PRIVATE allocator.hpp [["cxxopts.hpp"]])
+target_precompile_headers(sample
+  PRIVATE
+  allocator.hpp
+  executable_info.hpp
+  [["cxxopts.hpp"]])
 target_link_libraries(sample
   PRIVATE
   cxxopts::cxxopts
