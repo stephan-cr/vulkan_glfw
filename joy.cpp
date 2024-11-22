@@ -1,3 +1,5 @@
+#include "graphics.hpp"
+
 #include "GLFW/glfw3.h"
 
 #include <cmath>
@@ -52,11 +54,7 @@ std::ostream& operator<< (std::ostream& stream, const Pos& pos)
 int main()
 {
   glfwSetErrorCallback(error_callback);
-  if (glfwInit() == GLFW_FALSE) {
-    // Initialization failed
-
-    return 1;
-  }
+  GraphicsContext context;
 
   GLFWwindow* window = glfwCreateWindow(640, 480, "My Title", nullptr, nullptr);
   if (!window) {
@@ -161,6 +159,6 @@ int main()
   }
 
   glfwDestroyWindow(window);
-  glfwTerminate();
+
   return 0;
 }

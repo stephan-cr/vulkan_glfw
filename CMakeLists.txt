@@ -33,6 +33,9 @@ macro(add_shader target type input output)
   add_custom_target(${target} DEPENDS ${output})
 endmacro()
 
+add_library(graphics STATIC graphics.cpp)
+target_link_libraries(graphics PUBLIC glfw Vulkan::Vulkan)
+
 add_executable(sample
   executable_info.cpp
   main.cpp)
@@ -63,6 +66,7 @@ target_link_libraries(sample
   cxxopts::cxxopts
   glfw
   glm::glm
+  graphics
   Vulkan::Vulkan
 )
 
@@ -73,6 +77,7 @@ target_compile_features(joy PRIVATE cxx_std_17)
 target_link_libraries(joy
   PRIVATE
   glfw
+  graphics
 )
 
 add_executable(test_allocator test_allocator.cpp)

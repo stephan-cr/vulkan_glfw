@@ -1,6 +1,10 @@
 // Vulkan headers need to be included before GLFW, see
 // https://www.glfw.org/docs/latest/vulkan_guide.html
 
+#include "allocator.hpp"
+#include "executable_info.hpp"
+#include "graphics.hpp"
+
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #include "vulkan/vulkan.h"
 #include "vulkan/vulkan.hpp"
@@ -15,13 +19,11 @@
 
 #include "cxxopts.hpp"
 
-#include "allocator.hpp"
-#include "executable_info.hpp"
-
 #include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <functional>
@@ -37,7 +39,6 @@
 #include <string>
 #include <tuple>
 #include <type_traits>
-#include <utility>
 #include <vector>
 
 uint32_t get_instance_version()
@@ -55,135 +56,6 @@ uint32_t get_instance_version()
     return instanceVersion & 0xFFFF0000; //Remove the patch version.
   }
 }
-
-class GlfwContext
-{
-public:
-  GlfwContext()
-  {
-    if (glfwInit() == GLFW_FALSE) {
-      throw std::runtime_error("GLFW initialization failed");
-    }
-
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-  }
-
-  GlfwContext(const GlfwContext&) = delete;
-  GlfwContext& operator=(const GlfwContext&) = delete;
-
-  ~GlfwContext()
-  {
-    glfwTerminate();
-  }
-
-  void clear()
-  {
-    // glClear(GL_COLOR_BUFFER_BIT);
-  }
-
-  bool vulkan_supported() const
-  {
-    return glfwVulkanSupported() == GLFW_TRUE;
-  }
-
-  void pool_events()
-  {
-    glfwPollEvents();
-  }
-
-  void set_window_floating_hint(bool floating)
-  {
-    glfwWindowHint(GLFW_FLOATING, floating ? GLFW_TRUE : GLFW_FALSE);
-  }
-
-  double time()
-  {
-    return glfwGetTime();
-  }
-};
-
-class Window
-{
-public:
-  Window(int width, int height, const char* name) :
-    window{glfwCreateWindow(width, height, name, nullptr, nullptr),
-           &glfwDestroyWindow}
-  {
-    if (!window) {
-      throw std::runtime_error("GLFW window creation failed");
-    }
-  }
-
-  VkSurfaceKHR create_window_surface(VkInstance instance)
-  {
-    VkSurfaceKHR surface;
-    if (glfwCreateWindowSurface(instance, window.get(), nullptr, &surface) != VK_SUCCESS) {
-      throw std::runtime_error("create window surface failed");
-    }
-
-    return surface;
-  }
-
-  void set_key_callback(void (*callback)(GLFWwindow*, int, int, int, int))
-  {
-    glfwSetKeyCallback(window.get(), callback);
-  }
-
-  [[deprecated]]
-  void make_context_current()
-  {
-    glfwMakeContextCurrent(window.get());
-  }
-
-  bool should_close()
-  {
-    return glfwWindowShouldClose(window.get()) == GLFW_TRUE;
-  }
-
-  void show()
-  {
-    // glfwSetWindowPos(window.get(), 256, 256);
-    // glfwShowWindow(window.get());
-  }
-
-  [[deprecated]]
-  void swap_buffers()
-  {
-    glfwSwapBuffers(window.get());
-  }
-
-  Window(const Window&) = delete;
-  Window& operator=(const Window&) = delete;
-
-  Window(Window&& other) noexcept : window{std::exchange(other.window, nullptr)}
-  {
-  }
-
-  Window& operator=(Window&& other) noexcept
-  {
-    window = std::move(other.window);
-
-    return *this;
-  }
-
-  GLFWwindow* raw_glfw_window() const
-  {
-    return window.get();
-  }
-
-  std::pair<int, int> framebuffer_size() const
-  {
-    int width;
-    int height;
-    glfwGetFramebufferSize(window.get(), &width, &height);
-
-    return {width, height};
-  }
-
-private:
-  std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)> window;
-};
 
 struct Vertex {
   glm::vec2 pos;
@@ -328,7 +200,7 @@ int main(int argc, char** argv)
 
   try {
     glfwSetErrorCallback(error_callback);
-    GlfwContext context;
+    GraphicsContext context;
     context.set_window_floating_hint(true);
     glfwSetJoystickCallback(joystick_callback);
 
@@ -1198,8 +1070,8 @@ int main(int argc, char** argv)
     vkDeviceWaitIdle(device.get());
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';
-    return 1;
+    return EXIT_FAILURE;
   }
 
-  return 0;
+  return EXIT_SUCCESS;
 }
