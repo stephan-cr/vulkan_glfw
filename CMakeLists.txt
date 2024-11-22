@@ -78,6 +78,17 @@ target_link_libraries(joy
   graphics
 )
 
+add_executable(monitor
+  monitor.cpp)
+target_compile_options(monitor PRIVATE
+  $<$<CXX_COMPILER_ID:Clang,GNU>:-Wall;-Wextra;-Wconversion;-Wno-unused-parameter>)
+target_compile_features(monitor PRIVATE cxx_std_17)
+target_link_libraries(monitor
+  PRIVATE
+  glfw
+  graphics
+)
+
 add_executable(test_allocator test_allocator.cpp)
 target_compile_features(test_allocator PRIVATE cxx_std_17)
 target_link_libraries(test_allocator PRIVATE Catch2::Catch2WithMain)
