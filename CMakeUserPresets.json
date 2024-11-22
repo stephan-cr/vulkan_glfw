@@ -6,17 +6,22 @@
             "displayName": "Default Config",
             "description": "Default build using Ninja Multi-Config generator",
             "generator": "Ninja Multi-Config",
+            "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
                 "CMAKE_EXPORT_COMPILE_COMMANDS": {
                     "type": "BOOL",
                     "value": "ON"
+                },
+                "CMAKE_LINKER_TYPE": {
+                    "type": "STRING",
+                    "value": "MOLD"
                 }
             }
         },
         {
             "name": "clang",
-            "displayName": "Default Config",
-            "description": "Default build using Ninja Multi-Config generator",
+            "displayName": "Clang Config",
+            "description": "Clang build using Ninja Multi-Config generator",
             "generator": "Ninja Multi-Config",
             "binaryDir": "${sourceDir}/build_clang",
             "cacheVariables": {
