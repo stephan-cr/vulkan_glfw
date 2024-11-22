@@ -43,12 +43,10 @@ target_compile_options(sample PRIVATE
   $<$<CXX_COMPILER_ID:Clang,GNU>:-Wall;-Wextra;-Wconversion;-Wno-unused-parameter>
   $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:GNU>>:-fsanitize=address>
   $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:Clang,GNU>>:-fsanitize=undefined>
-  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:Clang>>:-fsanitize=memory>
 )
 target_link_options(sample PRIVATE
   $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:GNU>>:-fsanitize=address>
   $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:Clang,GNU>>:-fsanitize=undefined>
-  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:Clang>>:-fsanitize=memory>
 )
 add_shader(vert_spirv vertex ${CMAKE_SOURCE_DIR}/vert.glsl $<CONFIG>/vert.spv)
 add_shader(frag_spirv frag ${CMAKE_SOURCE_DIR}/frag.glsl $<CONFIG>/frag.spv)
