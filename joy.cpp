@@ -54,7 +54,7 @@ std::ostream& operator<< (std::ostream& stream, const Pos& pos)
 int main()
 {
   glfwSetErrorCallback(error_callback);
-  GraphicsContext context;
+  GraphicsContext context(ClientAPI::OPENGL);
 
   GLFWwindow* window = glfwCreateWindow(640, 480, "My Title", nullptr, nullptr);
   if (!window) {

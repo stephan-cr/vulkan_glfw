@@ -4,13 +4,22 @@
 
 #include <stdexcept>
 
-GraphicsContext::GraphicsContext()
+GraphicsContext::GraphicsContext(ClientAPI client_api)
 {
   if (glfwInit() == GLFW_FALSE) {
     throw std::runtime_error("GLFW initialization failed");
   }
 
-  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  switch (client_api) {
+  case ClientAPI::OPENGL:
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+    break;
+  case ClientAPI::OPENGL_ES:
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+    break;
+  default:
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  }
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 }
 
