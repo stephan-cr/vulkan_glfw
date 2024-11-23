@@ -9,10 +9,17 @@
 #include <memory>
 #include <utility>
 
+enum class ClientAPI
+{
+  VULKAN,
+  OPENGL,
+  OPENGL_ES,
+};
+
 class GraphicsContext
 {
 public:
-  GraphicsContext();
+  explicit GraphicsContext(ClientAPI client_api = ClientAPI::VULKAN);
   GraphicsContext(const GraphicsContext&) = delete;
   GraphicsContext& operator=(const GraphicsContext&) = delete;
   ~GraphicsContext();
@@ -32,14 +39,11 @@ public:
   VkSurfaceKHR create_window_surface(VkInstance instance);
 
   void set_key_callback(void (*callback)(GLFWwindow*, int, int, int, int));
-
-  [[deprecated]]
   void make_context_current();
-
+  void request_window_attention();
+  void set_should_close(bool should_close);
   bool should_close();
   void show();
-
-  [[deprecated]]
   void swap_buffers();
 
   Window(const Window&) = delete;

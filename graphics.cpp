@@ -77,10 +77,19 @@ void Window::set_key_callback(void (*callback)(GLFWwindow*, int, int, int, int))
   glfwSetKeyCallback(window.get(), callback);
 }
 
-[[deprecated]]
 void Window::make_context_current()
 {
   glfwMakeContextCurrent(window.get());
+}
+
+void Window::request_window_attention()
+{
+  glfwSetWindowShouldClose(window.get(), GLFW_TRUE);
+}
+
+void Window::set_should_close(bool should_close)
+{
+  glfwSetWindowShouldClose(window.get(), should_close ? GLFW_TRUE : GLFW_FALSE);
 }
 
 bool Window::should_close()
@@ -94,7 +103,6 @@ void Window::show()
   // glfwShowWindow(window.get());
 }
 
-[[deprecated]]
 void Window::swap_buffers()
 {
   glfwSwapBuffers(window.get());
