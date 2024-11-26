@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.29)
 
-project(vulkan_sample LANGUAGES CXX)
+project(vulkan_glfw LANGUAGES CXX)
 
 # in GLFW < 3.3, the gamepad wouldn't work
 find_package(Catch2 REQUIRED)
