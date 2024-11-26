@@ -399,7 +399,8 @@ int main(int argc, char** argv)
         std::cout << '\t' << extension << '\n';
       }
 
-      vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_devices[0], surface.get(), &details.capabilities);
+      if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_devices[0], surface.get(), &details.capabilities) != VK_SUCCESS)
+        throw std::runtime_error("querying physical device surface capabilities");
       int window_width, window_height;
       std::tie(window_width, window_height) = window.framebuffer_size();
       std::cout << "currentExtent.height: " << details.capabilities.currentExtent.height <<
