@@ -70,7 +70,8 @@ target_link_libraries(sample
 
 add_executable(joy
   joy.cpp)
-target_compile_options(joy PRIVATE $<$<CXX_COMPILER_ID:Clang,GNU>:-Wall -Wextra -Wno-unused-parameter>)
+target_compile_options(joy PRIVATE
+  $<$<CXX_COMPILER_ID:Clang,GNU>:-Wall;-Wextra;-Wconversion;-Wno-unused-parameter>)
 target_compile_features(joy PRIVATE cxx_std_17)
 target_link_libraries(joy
   PRIVATE
