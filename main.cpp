@@ -471,6 +471,17 @@ int main(int argc, char** argv)
         create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
       else
         throw std::runtime_error("VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR not supported");
+      create_info.clipped = VK_TRUE;
+      if (std::find(std::begin(details.present_modes), std::end(details.present_modes),
+                    VK_PRESENT_MODE_MAILBOX_KHR) != details.present_modes.end()) {
+        std::cout << "use VK_PRESENT_MODE_MAILBOX_KHR\n";
+        create_info.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+      } else {
+        std::cout << "use VK_PRESENT_MODE_FIFO_KHR\n";
+        create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+      }
+      create_info.oldSwapchain = VK_NULL_HANDLE;
+
 
       {
         VkSwapchainKHR temp_swap_chain;
